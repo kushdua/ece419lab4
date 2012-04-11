@@ -6,4 +6,8 @@ RM=rm -rf
 CAT=cat
 
 all: 
-	javac hash_attack.java
+	javac -classpath lib/zookeeper-3.3.2.jar:lib/log4j-1.2.15.jar worker_draft.java ZkConnector.java
+runWorker:
+	java -classpath lib/zookeeper-3.3.2.jar:lib/log4j-1.2.15.jar:. worker_draft
+clean:
+	rm -f *.class
