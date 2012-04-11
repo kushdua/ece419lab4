@@ -18,7 +18,7 @@ public class worker_draft {
 	static String workersPath = "/workers";
 	static String statusPath = "/status";
 	static String workerID = "0";
-	static List<String> CID_Set;
+	static List<String> CID_Set = new ArrayList<String>();
 	
 	static CountDownLatch nodeCreatedSignal = new CountDownLatch(1);
 
@@ -130,7 +130,6 @@ public class worker_draft {
         	i++;
         }
 		// Remove the newly removed nodes (if one client has been removed)
-		System.out.println("Removing:" + CID_Set.size());
 		i = 0;
 		while(i < CID_Set.size()) {
         	if(!children.contains(CID_Set.get(i))) {
