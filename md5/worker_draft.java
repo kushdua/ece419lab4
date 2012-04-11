@@ -18,6 +18,7 @@ public class worker_draft {
 	static String workersPath = "/workers";
 	static String statusPath = "/status";
 	static String workerID = "0";
+	static List<String> CID_Set;
 	
 	static CountDownLatch nodeCreatedSignal = new CountDownLatch(1);
 
@@ -78,7 +79,6 @@ public class worker_draft {
         }
         
         //3: Get the children of the /status node (collect all of the CIDs) and set a watch on the node
-        
         try {
         	List<String> children = grabChildren(zk, statusPath);
         } catch(KeeperException e) {
@@ -100,7 +100,7 @@ public class worker_draft {
         System.out.println("DONE");
     }
     
-    private static List<String> grabChildren (final ZooKeeper zk, final String path) throws Exception{
+    private static List<String> grabChildren (final ZooKeeper zk, final String path) throws Exception {
 		List<String> children = zk.getChildren(
 			path,
 			new Watcher() { 
@@ -108,7 +108,7 @@ public class worker_draft {
 				    // check for event type NodeChildrenChanged
 				    boolean NodeChildrenChanged  = event.getType().equals(EventType.NodeChildrenChanged);
 				    if (NodeChildrenChanged) {
-				    	System.out.println("New Child added!..");
+				    	System.out.println("Children of " + path + " have changed.");
 				    	try {
 				    		List<String> new_children  = grabChildren(zk, path);
 				    	} catch(KeeperException e) {
@@ -120,9 +120,23 @@ public class worker_draft {
 				}
 			}
 		);
+		// Add the new nodes (if one client has been added)
 		int i = 0;
 		while(i < children.size()) {
-        	System.out.println(children.get(i));
+        	if(!CID_Set.contains(children.get(i))) {
+        		CID_Set.add(children.get(i));
+        		System.out.println("Added:" + children.get(i));
+        	}
+        	i++;
+        }
+		// Remove the newly removed nodes (if one client has been removed)
+		System.out.println("Removing:" + CID_Set.size());
+		i = 0;
+		while(i < CID_Set.size()) {
+        	if(!children.contains(CID_Set.get(i))) {
+        		System.out.println("Removing:" + CID_Set.get(i));
+        		CID_Set.remove(CID_Set.get(i));
+        	}
         	i++;
         }
 		return children;
