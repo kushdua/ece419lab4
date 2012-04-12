@@ -478,14 +478,8 @@ class ClientHandler extends Thread
 			                "/status/"+CID+"/",         // Path of znode
 			                output.getBytes(),           // Data to store
 			                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
-			                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
+			                CreateMode.PERSISTENT_SEQUENTIAL // Znode type, set to Persistent Sequential
 			                );
-			            //TODO: Remove println
-			            System.out.println("Created CID znode "+path);
-			            if(path.equals("/status/"+CID))
-			            {
-			            	//Living success at success!
-			            }
 			        } catch(KeeperException e) {
 			        	if(e.code()==KeeperException.Code.NODEEXISTS)
 			        	{
