@@ -11,6 +11,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -92,10 +93,18 @@ public class JT {
 	        
         	//Create znode
             try {
+            	String IP=serverSocket.getInetAddress().getHostAddress();//getHostName();
+        		
+    			if(IP.equals("localhost") || IP.equals("127.0.0.1"))
+    			{
+    				IP=InetAddress.getLocalHost().getHostAddress();
+    			}
+    			String location=IP+":"+localPort;
+    			
                 System.out.println("Creating " + JT_PATH);
                 String path=zk.create(
                     JT_PATH,         // Path of znode
-                    null,           // Data not needed.
+                    location.getBytes(),           // Data not needed.
                     Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
                     CreateMode.EPHEMERAL   // Znode type, set to Ephemeral.
                     );
@@ -157,204 +166,238 @@ class ClientHandler extends Thread
 
 	public void run() {
 		//Client connected => listen for messages
-		
-		if(1==1)
-		{
-			//TODO: Get CID from packet
-			CID=1;
-	    	//Create znode
-	        try {
-	            System.out.println("Creating " + CID);
-	            String path=zk.create(
-	                "/status/"+CID,         // Path of znode
-	                null,           // Data not needed.
-	                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
-	                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
-	                );
-	            //TODO: Remove println
-	            System.out.println("Created CID znode "+path);
-	            if(path.equals("/status/"+CID))
-	            {
-	            	//Living success at success!
-	            }
-	        } catch(KeeperException e) {
-	        	if(e.code()==KeeperException.Code.NODEEXISTS)
-	        	{
-	        		//Do nothing... client used our services before :-)
-	        	}
-	        } catch(Exception e) {
-	            System.out.println("Make node error:" + e.getMessage());
-	        }
-		}
-		else if(2==2)
-		{
-			//SUBMIT JOB
-			//TODO: Get input hash...
-			String inputHash="abc";
-	        String output="";
-	        
-	        //Get active workers
-			List<String> workers=null;
-			try {
-				workers = zk.getChildren(
-						"/workers/",
-						null);
-			} catch (KeeperException e) {
-				workers=null;
-			} catch (InterruptedException e) {
-				workers=null;
-			}
-			
-			List<String> dictParts=null;
-			try {
-				dictParts = zk.getChildren(
-						"/status/"+CID,
-						null);
-			} catch (KeeperException e) {
-				dictParts=null;
-			} catch (InterruptedException e) {
-				dictParts=null;
-			}
-
-		
-			//Compute JID contents
-			Stat nodeStat=null;
-			int currDict=0;
-			while(currDict<dictParts.size())
-			{
-				for(int i=0; i<workers.size(); i++, currDict++)
+        try {
+			BrokerPacket fromclientpacket = null;
+			while((fromclientpacket = (BrokerPacket) fromplayer.readObject())!=null){
+				if(fromclientpacket.type==BrokerPacket.BROKER_passid)
 				{
-					byte[] dictURI=null;
+					CID=Integer.parseInt(fromclientpacket.symbol);
+			    	//Create znode
+			        try {
+			            System.out.println("Creating " + CID);
+			            String path=zk.create(
+			                "/status/"+CID,         // Path of znode
+			                null,           // Data not needed.
+			                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+			                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
+			                );
+			            //TODO: Remove println
+			            System.out.println("Created CID znode "+path);
+			            if(path.equals("/status/"+CID))
+			            {
+							BrokerPacket toclient=new BrokerPacket();
+					        toclient.type=BrokerPacket.BROKER_passid;
+							toclient.symbol="Successfully recorded your client ID.";
+							toPlayer.writeObject(toclient);
+							continue;
+			            }
+			        } catch(KeeperException e) {
+			        	if(e.code()==KeeperException.Code.NODEEXISTS)
+			        	{
+			        		//Do nothing... client used our services before :-)
+			        	}
+			        } catch(Exception e) {
+			        	//Send error message below to the client...
+			        }
+			        
+
+					BrokerPacket toclient=new BrokerPacket();
+			        toclient.type=BrokerPacket.BROKER_passid;
+					toclient.symbol="Error: Could not record your client ID.";
+					toPlayer.writeObject(toclient);
+				}
+				else if(fromclientpacket.type==BrokerPacket.BROKER_submitquery)
+				{
+					//SUBMIT JOB
+					String inputHash=fromclientpacket.symbol;
+			        String output="";
+			        
+			        //Get active workers
+					List<String> workers=null;
 					try {
-						dictURI = zk.getData("/dictionary/"+dictParts.get(currDict),
-								false,
-								nodeStat);
+						workers = zk.getChildren(
+								"/workers/",
+								null);
 					} catch (KeeperException e) {
-						//TODO: Return client error - could not create the job... Rollback too
+						workers=null;
 					} catch (InterruptedException e) {
-						//TODO: Return client error - could not create the job... Rollback too
+						workers=null;
 					}
 					
-					output+=workers.get(i)+","+new String(dictURI)+","+inputHash+",0,"+JT.ANSWER_NOT_FOUND+"\n";
-				}
-			}
+					List<String> dictParts=null;
+					try {
+						dictParts = zk.getChildren(
+								"/status/"+CID,
+								null);
+					} catch (KeeperException e) {
+						dictParts=null;
+					} catch (InterruptedException e) {
+						dictParts=null;
+					}
 
-			String path="";
-			//Create JID sequential node under /submit/CID/
-	        try {
-	            path=zk.create(
-	                "/status/"+CID+"/",         // Path of znode
-	                output.getBytes(),           // Data to store
-	                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
-	                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
-	                );
-	            //TODO: Remove println
-	            System.out.println("Created CID znode "+path);
-	            if(path.equals("/status/"+CID))
-	            {
-	            	//Living success at success!
-	            }
-	        } catch(KeeperException e) {
-	        	if(e.code()==KeeperException.Code.NODEEXISTS)
-	        	{
-	        		//TODO: Return error to user that we couldn't submit job...
-	        	}
-	        } catch(Exception e) {
-	            System.out.println("Make node error:" + e.getMessage());
-	        }
-	        
-	        int JID=Integer.parseInt(path.substring(path.lastIndexOf('/')).trim());
-		}
-		else if(3==3)
-		{
-			//GET STATUS
-			List<String> jobs=null;
-			String output="JOB ID\tSTATUS\\tPASSWORDn";
-			try {
-				jobs = zk.getChildren(
-						"/status/"+CID,
-						null);
-			} catch (KeeperException e) {
-				jobs=null;
-			} catch (InterruptedException e) {
-				jobs=null;
-			}
-			
-			for(String elem : jobs)
-			{
-				Stat nodeStat=null;
-				boolean validJobData=true;
-				output+="elem\t";
-				try {
-					byte[] jobValue=zk.getData("/status/"+CID+"/"+elem,
-							false,
-							nodeStat);
-					String value=new String(jobValue);
-					int total=0, completed=0;
-					String[] parts=value.split("\n");
-					for(String part : parts)
+				
+					//Compute JID contents
+					Stat nodeStat=null;
+					int currDict=0;
+					while(currDict<dictParts.size())
 					{
-						String[] values=part.split(",");
-						if(values.length==5)
+						for(int i=0; i<workers.size(); i++, currDict++)
 						{
-							total++;
-							if(values[3].equals("1"))
-							{
-								completed++;
+							byte[] dictURI=null;
+							try {
+								dictURI = zk.getData("/dictionary/"+dictParts.get(currDict),
+										false,
+										nodeStat);
+							} catch (KeeperException e) {
+								BrokerPacket toclient=new BrokerPacket();
+						        toclient.type=BrokerPacket.BROKER_submitquery;
+								toclient.symbol="Error: Could not submit new job due to problem with dictionary.";
+								toPlayer.writeObject(toclient);
+							} catch (InterruptedException e) {
+								BrokerPacket toclient=new BrokerPacket();
+						        toclient.type=BrokerPacket.BROKER_submitquery;
+								toclient.symbol="Error: Could not submit new job due to unexpected problem with dictionary.";
+								toPlayer.writeObject(toclient);
 							}
 							
-							if(!values[4].equals(JT.ANSWER_NOT_FOUND))
-							{
-								output+="COMPLETE\t\t"+values[4]+"\n";
-								break;
-							}
-						}
-						else
-						{
-							validJobData=false;
+							output+=workers.get(i)+","+new String(dictURI)+","+inputHash+",0,"+JT.ANSWER_NOT_FOUND+"\n";
 						}
 					}
-					//Add progress + output here...
-					if(total==completed)
-					{
-						output+="COMPLETE\t\t-\n";
-					}
-					else
-					{
-						output+="IN PROGRESS\t\t-\n";
-					}
-				} catch (KeeperException e) {
-					output+="UNKNOWN\t\t-\n";
-				} catch (InterruptedException e) {
-					output+="UNKNOWN\t\t-\n";
-				}
 
-				//Invalid job progress contents
-				if(validJobData==false)
+					String path="";
+					//Create JID sequential node under /submit/CID/
+			        try {
+			            path=zk.create(
+			                "/status/"+CID+"/",         // Path of znode
+			                output.getBytes(),           // Data to store
+			                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+			                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
+			                );
+			            //TODO: Remove println
+			            System.out.println("Created CID znode "+path);
+			            if(path.equals("/status/"+CID))
+			            {
+			            	//Living success at success!
+			            }
+			        } catch(KeeperException e) {
+			        	if(e.code()==KeeperException.Code.NODEEXISTS)
+			        	{
+			        		BrokerPacket toclient=new BrokerPacket();
+					        toclient.type=BrokerPacket.BROKER_submitquery;
+							toclient.symbol="Error: Could not submit new job.";
+							toPlayer.writeObject(toclient);
+			        	}
+			        } catch(Exception e) {
+			        	BrokerPacket toclient=new BrokerPacket();
+				        toclient.type=BrokerPacket.BROKER_submitquery;
+						toclient.symbol="Error: Could not submit new job due to unexpected problem.";
+						toPlayer.writeObject(toclient);
+			        }
+			        
+			        //Send results to client
+			        int JID=Integer.parseInt(path.substring(path.lastIndexOf('/')).trim());
+			        BrokerPacket toclient=new BrokerPacket();
+			        toclient.type=BrokerPacket.BROKER_submitquery;
+					toclient.symbol="Successfully submitted job "+JID+".";
+					toPlayer.writeObject(toclient);
+				}
+				else if(fromclientpacket.type==BrokerPacket.BROKER_jobqueue)
 				{
-					output+="UNKNOWN\t-\n";
+					//GET STATUS
+					List<String> jobs=null;
+					String output="JOB ID\tSTATUS\\tPASSWORDn";
+					try {
+						jobs = zk.getChildren(
+								"/status/"+CID,
+								null);
+					} catch (KeeperException e) {
+						jobs=null;
+					} catch (InterruptedException e) {
+						jobs=null;
+					}
+					
+					for(String elem : jobs)
+					{
+						Stat nodeStat=null;
+						boolean validJobData=true;
+						output+="elem\t";
+						try {
+							byte[] jobValue=zk.getData("/status/"+CID+"/"+elem,
+									false,
+									nodeStat);
+							String value=new String(jobValue);
+							int total=0, completed=0;
+							String[] parts=value.split("\n");
+							for(String part : parts)
+							{
+								String[] values=part.split(",");
+								if(values.length==5)
+								{
+									total++;
+									if(values[3].equals("1"))
+									{
+										completed++;
+									}
+									
+									if(!values[4].equals(JT.ANSWER_NOT_FOUND))
+									{
+										output+="COMPLETE\t\t"+values[4]+"\n";
+										break;
+									}
+								}
+								else
+								{
+									validJobData=false;
+								}
+							}
+							//Add progress + output here...
+							if(total==completed)
+							{
+								output+="COMPLETE\t\t-\n";
+							}
+							else
+							{
+								output+="IN PROGRESS\t\t-\n";
+							}
+						} catch (KeeperException e) {
+							output+="UNKNOWN\t\t-\n";
+						} catch (InterruptedException e) {
+							output+="UNKNOWN\t\t-\n";
+						}
+
+						//Invalid job progress contents
+						if(validJobData==false)
+						{
+							output+="UNKNOWN\t-\n";
+						}
+						
+						//Send results to client
+						BrokerPacket toclient=new BrokerPacket();
+				        toclient.type=BrokerPacket.BROKER_jobqueue;
+						toclient.symbol=output;
+						toPlayer.writeObject(toclient);
+					}
+				}
+				else if(fromclientpacket.type==BrokerPacket.BROKER_BYE)
+				{
+					fromplayer.close();
+					toPlayer.close();
+					socket.close();
+					break;
 				}
 			}
-		}
-/*        try {
-			MazewarPacket fromclientpacket = null;
-			while((fromclientpacket = (MazewarPacket) fromplayer.readObject())!=null){
-				//TODO: DO YAH THING BRAH
-			}	
 		} catch (SocketException e) {
 			//Remove socket and any game objects (client from maze, projectiles, etc)
 			System.err.println("SocketException generated. Game client most likely disconnected.");
-			//TODO: CLEAN UP YOUR SHIT
 		} catch (EOFException e) {
 			//Remove socket and any game objects (client from maze, projectiles, etc)
 			System.err.println("EOFException generated. Game client most likely disconnected.");
-			//TODO: CLEAN UP YOUR SHIT
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
-*/	}
+	}
 
     public Socket getClientSocket() {
         return socket;

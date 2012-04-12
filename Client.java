@@ -15,8 +15,7 @@ public class Client {
 	 static CountDownLatch nodeCreatedSignal = new CountDownLatch(1);
 	 static String myPath = "/jobtracker";
 	    
-	public static void main(String[] args) throws IOException,
-			ClassNotFoundException {
+	public static void main(String[] args){
 		
 		/*  ---------------CODE FLOW -----------------------------
 		 * 1. Connect/Lookup with the zookeeper
@@ -42,169 +41,191 @@ public class Client {
 
         ZooKeeper zk = zkc.getZooKeeper();
         Stat exists=null;
-        try {
-            exists=zk.exists(
-                myPath, 
-                new Watcher() {       // Anonymous Watcher
-                    @Override
-                    public void process(WatchedEvent event) {
-                        // check for event type NodeCreated
-                        boolean isNodeCreated = event.getType().equals(EventType.NodeCreated);
-                        // verify if this is the defined znode
-                        boolean isMyPath = event.getPath().equals(myPath);
-                        if (isNodeCreated && isMyPath) {
-                            System.out.println(myPath + " created!");
-                            nodeCreatedSignal.countDown();
-                        }
-                    }
-                });
-
-            
-        } catch(KeeperException e) {
-            System.out.println(e.code());
-        } catch(Exception e) {
-            System.out.println(e.getMessage());
-        }
-                            
-        System.out.println("Waiting for " + myPath + " to be created ...");
-		//System.out.println("Please wait while we connect to Job Tracker");
-        
-        
-
-        if(exists==null)
+        while(true)
         {
-	        try{       
-	            nodeCreatedSignal.await();
+	        try {
+	        	while(exists==null)
+	        	{
+		            exists=zk.exists(
+		                myPath, 
+		                new Watcher() {       // Anonymous Watcher
+		                    @Override
+		                    public void process(WatchedEvent event) {
+		                        // check for event type NodeCreated
+		                        boolean isNodeCreated = event.getType().equals(EventType.NodeCreated);
+		                        // verify if this is the defined znode
+		                        boolean isMyPath = event.getPath().equals(myPath);
+		                        if (isNodeCreated && isMyPath) {
+		                            System.out.println(myPath + " created!");
+		                            nodeCreatedSignal.countDown();
+		                        }
+		                    }
+		                });
+	        	}
+	
+	            
+	        } catch(KeeperException e) {
+	            System.out.println(e.code());
 	        } catch(Exception e) {
 	            System.out.println(e.getMessage());
 	        }
-        }
-        
-        //retrieve the information regarding the node
-        byte[] b = null;
-        try {
-            b = zk.getData(myPath, false, null);
-        } catch (KeeperException e) {
-            // We don't need to worry about recovering now. The watch
-            // callbacks will kick off any exception handling
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            return;
-        }
-
-        String thedata=new String(b);
-        //System.out.println(thedata);
-        System.out.println("Connecting to the Jobtracker Please wait");
-        
-        /*
-         * AT this time primary Job tracker has been created and the TCP/IP 
-         * information including port number etc has been retrieved
-         */
-        
-        Socket brokerSocket = null;
-		ObjectOutputStream out = null;
-		ObjectInputStream in = null;
-
-		//Open connection to broker, or exit if unsuccessful
-		try {
-			/* variables for hostname/port */
-			String hostname = "localhost";
-			int port = 4444;
-			
-			//Open connection only if appropriate command line arguments are provided
-			//exit otherwise...
-			if(args.length == 1 ) {
-				String[] datasplit = thedata.split(";");
-				hostname = datasplit[0];
-				port = Integer.parseInt(datasplit[1]);
-			} else {
-				System.err.println("ERROR: Invalid arguments!");
-				System.exit(-1);
+	                            
+	        System.out.println("Waiting for " + myPath + " to be created ...");
+			//System.out.println("Please wait while we connect to Job Tracker");
+	        
+	        
+	
+	        if(exists==null)
+	        {
+		        try{       
+		            nodeCreatedSignal.await();
+		        } catch(Exception e) {
+		            System.out.println(e.getMessage());
+		        }
+	        }
+	        
+	        //retrieve the information regarding the node
+	        byte[] b = null;
+	        try {
+	            b = zk.getData(myPath, false, null);
+	        } catch (KeeperException e) {
+	            // We don't need to worry about recovering now. The watch
+	            // callbacks will kick off any exception handling
+	            e.printStackTrace();
+	        } catch (InterruptedException e) {
+	            return;
+	        }
+	
+	        String thedata=new String(b);
+	        //System.out.println(thedata);
+	        System.out.println("Connecting to the Jobtracker Please wait");
+	        
+	        /*
+	         * AT this time primary Job tracker has been created and the TCP/IP 
+	         * information including port number etc has been retrieved
+	         */
+	        
+	        Socket brokerSocket = null;
+			ObjectOutputStream out = null;
+			ObjectInputStream in = null;
+	
+			//Open connection to broker, or exit if unsuccessful
+			try {
+				/* variables for hostname/port */
+				String hostname = "localhost";
+				int port = 4444;
+				
+				//Open connection only if appropriate command line arguments are provided
+				//exit otherwise...
+				if(args.length == 1 ) {
+					String[] datasplit = thedata.split(":");
+					hostname = datasplit[0];
+					port = Integer.parseInt(datasplit[1]);
+				} else {
+					System.err.println("ERROR: Invalid arguments!");
+					System.exit(-1);
+				}
+				brokerSocket = new Socket(hostname, port);
+	
+				out = new ObjectOutputStream(brokerSocket.getOutputStream());
+				in = new ObjectInputStream(brokerSocket.getInputStream());
+	
+			} catch (UnknownHostException e) {
+				System.err.println("ERROR: Don't know where to connect!!");
+				//Try to get new address from JT and reconnect
+				continue;
+				//System.exit(1);
+			} catch (IOException e) {
+				System.err.println("ERROR: Couldn't get I/O for the connection.");
+				//Try to get new address from JT and reconnect
+				continue;
+				//System.exit(1);
 			}
-			brokerSocket = new Socket(hostname, port);
-
-			out = new ObjectOutputStream(brokerSocket.getOutputStream());
-			in = new ObjectInputStream(brokerSocket.getInputStream());
-
-		} catch (UnknownHostException e) {
-			System.err.println("ERROR: Don't know where to connect!!");
-			System.exit(1);
-		} catch (IOException e) {
-			System.err.println("ERROR: Couldn't get I/O for the connection.");
-			System.exit(1);
-		}
-
-		System.out.println("Connection to the Jobtracker Successfull");
-		//Display prompt and set up required variables for getting user input
-		System.out.println("Enter queries or x for exit:");
-		System.out.print("> ");
-		BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
-		String userInput;
-
-		//Keep getting user input and transmitting to broker until client quits ('x')
-		while ((userInput = stdIn.readLine()) != null
-				&& !userInput.trim().equals("x")) {
-
-			/*
-			 * This code is for sending packets to the JOB TRACKER
-			 */
-			BrokerPacket pts = new BrokerPacket();
-			if(userInput.contains("passid"))
-			{
-				//in the begening pass the id to the Jobtracker
-				pts.type = BrokerPacket.BROKER_passid;
-				pts.symbol = userInput.trim();
-				/* send the new server packet */
-				out.writeObject(pts);
-			}
-			else if(userInput.contains("submitquery")) {
-				//Send query request to JT
-				pts.type = BrokerPacket.BROKER_submitquery;
-				pts.symbol = userInput.trim();
-				/* send the new server packet */
-				out.writeObject(pts);
-			} 
-			else if(userInput.contains("jobqueue")) {
-				//Send queue request to JT
-					pts.type = BrokerPacket.BROKER_jobqueue;
-					pts.symbol = userInput.trim();
-					/* send the new server packet */
-					out.writeObject(pts);
-			} else {
-			System.out.println("Invalid Argument, Please Try Again");
-			}
-
-			
-			/*
-			 * This code is for receiving packets from JobTracker
-			 */
-
-			/* print server reply */
-			BrokerPacket pfs = null;
-			pfs = (BrokerPacket) in.readObject();
-
-			if(pfs.type == BrokerPacket.BROKER_passid || pfs.type == BrokerPacket.BROKER_submitquery || pfs.type == BrokerPacket.BROKER_jobqueue)
-			{
-				System.out.println(pfs.quote);
-			}
-			else
-			{
-				System.out.println("Uknown packet from JobTracker.");
-			}
-
-			/* re-print console prompt */
+	
+			System.out.println("Connection to the Jobtracker Successfull");
+			//Display prompt and set up required variables for getting user input
+			System.out.println("Enter queries or x for exit:");
 			System.out.print("> ");
-		}
-
-		/* tell server that i'm quitting */
-		BrokerPacket pts = new BrokerPacket();
-		pts.type = BrokerPacket.BROKER_BYE;
-		out.writeObject(pts);
-
-		//Close channels and socket to broker
-		out.close();
-		in.close();
-		stdIn.close();
-		brokerSocket.close();
+			BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
+			String userInput;
+	
+			while(true)
+			{
+				//Keep getting user input and transmitting to broker until client quits ('x')
+				try {
+					while ((userInput = stdIn.readLine()) != null
+							&& !userInput.trim().equals("x")) {
+	
+						/*
+						 * This code is for sending packets to the JOB TRACKER
+						 */
+						BrokerPacket pts = new BrokerPacket();
+						if(userInput.contains("passid"))
+						{
+							//in the begening pass the id to the Jobtracker
+							pts.type = BrokerPacket.BROKER_passid;
+							pts.symbol = userInput.trim();
+							/* send the new server packet */
+							out.writeObject(pts);
+						}
+						else if(userInput.contains("submitquery")) {
+							//Send query request to JT
+							pts.type = BrokerPacket.BROKER_submitquery;
+							pts.symbol = userInput.trim();
+							/* send the new server packet */
+							out.writeObject(pts);
+						} 
+						else if(userInput.contains("jobqueue")) {
+							//Send queue request to JT
+								pts.type = BrokerPacket.BROKER_jobqueue;
+								pts.symbol = userInput.trim();
+								/* send the new server packet */
+								out.writeObject(pts);
+						} else {
+						System.out.println("Invalid Argument, Please Try Again");
+						}
+	
+						
+						/*
+						 * This code is for receiving packets from JobTracker
+						 */
+	
+						/* print server reply */
+						BrokerPacket pfs = null;
+						pfs = (BrokerPacket) in.readObject();
+	
+						if(pfs.type == BrokerPacket.BROKER_passid || pfs.type == BrokerPacket.BROKER_submitquery || pfs.type == BrokerPacket.BROKER_jobqueue)
+						{
+							System.out.println(pfs.symbol);
+						}
+						else
+						{
+							System.out.println("Unknown packet from JobTracker.");
+						}
+	
+						/* re-print console prompt */
+						System.out.print("> ");
+					}
+	
+					/* tell server that i'm quitting */
+					BrokerPacket pts = new BrokerPacket();
+					pts.type = BrokerPacket.BROKER_BYE;
+					out.writeObject(pts);
+			
+					//Close channels and socket to broker
+					out.close();
+					in.close();
+					stdIn.close();
+					brokerSocket.close();
+					System.exit(-1);
+				} catch (IOException e) {
+					//Try to get new address from JT and reconnect
+					break;
+				} catch (ClassNotFoundException e) {
+					//Try to get new address from JT and reconnect
+					break;
+				}
+			}
+        }
 	}
 }
