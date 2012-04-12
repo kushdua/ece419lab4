@@ -189,8 +189,8 @@ class ClientHandler extends Thread
 		else if(2==2)
 		{
 			//SUBMIT JOB
-			String path="";
-
+			//TODO: Get input hash...
+			String inputHash="abc";
 	        String output="";
 	        
 	        //Get active workers
@@ -215,15 +215,36 @@ class ClientHandler extends Thread
 			} catch (InterruptedException e) {
 				dictParts=null;
 			}
-			
+
+		
 			//Compute JID contents
-			//TODO TODO TODO TODO TODO...
-			
+			Stat nodeStat=null;
+			int currDict=0;
+			while(currDict<dictParts.size())
+			{
+				for(int i=0; i<workers.size(); i++, currDict++)
+				{
+					byte[] dictURI=null;
+					try {
+						dictURI = zk.getData("/dictionary/"+dictParts.get(currDict),
+								false,
+								nodeStat);
+					} catch (KeeperException e) {
+						//TODO: Return client error - could not create the job... Rollback too
+					} catch (InterruptedException e) {
+						//TODO: Return client error - could not create the job... Rollback too
+					}
+					
+					output+=workers.get(i)+","+new String(dictURI)+","+inputHash+",0,"+JT.ANSWER_NOT_FOUND+"\n";
+				}
+			}
+
+			String path="";
 			//Create JID sequential node under /submit/CID/
 	        try {
 	            path=zk.create(
 	                "/status/"+CID+"/",         // Path of znode
-	                output,           // Data not needed.
+	                output.getBytes(),           // Data to store
 	                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
 	                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
 	                );
