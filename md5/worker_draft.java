@@ -13,12 +13,24 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 
+class CID_struct implements Serializable {
+	public String  CID;
+	static List<String> JID_Set; 
+	
+	/* constructor */
+	public CID_struct(String CID) {
+		JID_Set = new ArrayList<String>();
+		this.CID = CID;
+	}	
+}
+
 public class worker_draft {
 
 	static String workersPath = "/workers";
 	static String statusPath = "/status";
 	static String workerID = "0";
 	static List<String> CID_Set = new ArrayList<String>();
+	static HashMap JID_Set = new HashMap();
 	
 	static CountDownLatch nodeCreatedSignal = new CountDownLatch(1);
 
@@ -80,7 +92,7 @@ public class worker_draft {
         
         //3: Get the children of the /status node (collect all of the CIDs) and set a watch on the node
         try {
-        	List<String> children = grabChildren(zk, statusPath);
+        	List<String> children = listenClients(zk, statusPath);
         } catch(KeeperException e) {
             System.out.println(e.code());
         } catch(Exception e) {
@@ -89,7 +101,7 @@ public class worker_draft {
         
         
         
-        System.out.println("Waiting for " + statusPath + " children to be created ...");
+        System.out.println("Just chillin'...");
         
         try{       
             nodeCreatedSignal.await();
@@ -100,8 +112,9 @@ public class worker_draft {
         System.out.println("DONE");
     }
     
-    private static List<String> grabChildren (final ZooKeeper zk, final String path) throws Exception {
-		List<String> children = zk.getChildren(
+    // Listens to new clients (CID)
+    private static List<String> listenClients (final ZooKeeper zk, final String path) throws Exception {
+		List<String> clients = zk.getChildren(
 			path,
 			new Watcher() { 
 				public void process(WatchedEvent event) {
@@ -110,7 +123,7 @@ public class worker_draft {
 				    if (NodeChildrenChanged) {
 				    	System.out.println("Children of " + path + " have changed.");
 				    	try {
-				    		List<String> new_children  = grabChildren(zk, path);
+				    		List<String> new_children  = listenClients(zk, path);
 				    	} catch(KeeperException e) {
 							System.out.println(e.code());
 						} catch(Exception e) {
@@ -122,23 +135,105 @@ public class worker_draft {
 		);
 		// Add the new nodes (if one client has been added)
 		int i = 0;
-		while(i < children.size()) {
-        	if(!CID_Set.contains(children.get(i))) {
-        		CID_Set.add(children.get(i));
-        		System.out.println("Added:" + children.get(i));
+		while(i < clients.size()) {
+        	if(!CID_Set.contains(clients.get(i))) {
+        		// Add the CID to the CID set
+        		CID_Set.add(clients.get(i));
+        		// Add the CID to the JID hashmap
+        		JID_Set.put(clients.get(i), new ArrayList<String>());
+        		// Set a listener on that node
+        		listenJobs(zk, path + "/" + clients.get(i), clients.get(i));
+        		System.out.println("Added CID: " + clients.get(i));
         	}
         	i++;
         }
 		// Remove the newly removed nodes (if one client has been removed)
 		i = 0;
 		while(i < CID_Set.size()) {
-        	if(!children.contains(CID_Set.get(i))) {
-        		System.out.println("Removing:" + CID_Set.get(i));
+        	if(!clients.contains(CID_Set.get(i))) {
+        		System.out.println("Removing CID: " + CID_Set.get(i));
+        		// Remove the CID from the CID set
         		CID_Set.remove(CID_Set.get(i));
+        		// Remove the CID from the JID hashmap
+        		JID_Set.remove(CID_Set.get(i));
         	}
         	i++;
         }
-		return children;
+		return clients;
+	}
+	
+	// Listens to new jobs (JID)
+	private static void listenJobs (final ZooKeeper zk, final String path, final String CID) throws Exception {
+		List<String> jobs = zk.getChildren(
+			path,
+			new Watcher() { 
+				public void process(WatchedEvent event) {
+				    // check for event type NodeChildrenChanged
+				    boolean NodeChildrenChanged  = event.getType().equals(EventType.NodeChildrenChanged);
+				    if (NodeChildrenChanged) {
+				    	System.out.println("Children of " + path + " have changed.");
+				    	try {
+				    		listenJobs(zk, path, CID);
+				    	} catch(KeeperException e) {
+							System.out.println(e.code());
+						} catch(Exception e) {
+							System.out.println("Make node:" + e.getMessage());
+						}
+				    }
+				}
+			}
+		);
+		// Add the new nodes (if one job has been added)
+		List<String> JID_list = (List<String>) JID_Set.get(CID);
+		int i = 0;
+		while(i < jobs.size()) {
+        	if(!JID_list.contains(jobs.get(i))) {
+        		// Add the CID to the CID set
+        		JID_list.add(jobs.get(i));
+        		// Set a watch on the JID node
+        		listenStatus(zk, path + "/" + jobs.get(i));
+        		System.out.println("Added JID: " + jobs.get(i) + " to CID " + CID);
+        	}
+        	i++;
+        }
+        // Remove the newly removed nodes (if one job has been removed)
+		i = 0;
+		while(i < ((List<String>)JID_Set.get(CID)).size()) {
+        	if(!jobs.contains(((List<String>)JID_Set.get(CID)).get(i))) {
+        		System.out.println("Removing JID: " + ((List<String>)JID_Set.get(CID)).get(i) + " from CID " + CID);
+        		// Remove the JID from the JID hashmap
+        		((List<String>)JID_Set.get(CID)).remove((((List<String>)JID_Set.get(CID)).get(i)));
+        	}
+        	i++;
+        }
+		
+	}
+	
+	
+	private static void listenStatus (final ZooKeeper zk, final String path) throws Exception {
+		byte b[] = zk.getData(
+            path, 
+            new Watcher() {       // Anonymous Watcher
+                @Override
+                public void process(WatchedEvent event) {
+                	// Check for data modifications from the job tracker
+                    boolean NodeDataChanged = event.getType().equals(EventType.NodeDataChanged);
+                    if (NodeDataChanged) {
+                        try {
+                        	byte data_bytes[] = zk.getData(path, false, null);
+				    		String data = new String(data_bytes);
+				    		System.out.println("Data from status node " + path + " is: " + data);
+				    		// Set the watch again
+				    		listenStatus(zk, path);
+                        } catch(KeeperException e) {
+							System.out.println(e.code());
+						} catch(Exception e) {
+							System.out.println("Make node:" + e.getMessage());
+						}	
+                    }
+                }
+            },
+            null);
 	}
     
     private static String findHash(String hash) {
