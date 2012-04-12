@@ -92,7 +92,7 @@ public class worker_draft {
         } catch(KeeperException e) {
             System.out.println(e.code());
         } catch(Exception e) {
-            System.out.println("Make node:" + e.getMessage());
+            System.out.println(e.getMessage());
         }
         
         //3: Get the children of the /status node (collect all of the CIDs) and set a watch on the node
@@ -101,7 +101,7 @@ public class worker_draft {
         } catch(KeeperException e) {
             System.out.println(e.code());
         } catch(Exception e) {
-            System.out.println("Make node:" + e.getMessage());
+            System.out.println(e.getMessage());
         }
         
         
@@ -132,7 +132,7 @@ public class worker_draft {
 				    	} catch(KeeperException e) {
 							System.out.println(e.code());
 						} catch(Exception e) {
-							System.out.println("Make node:" + e.getMessage());
+							System.out.println(e.getMessage());
 						}
 				    }
 				}
@@ -182,7 +182,7 @@ public class worker_draft {
 				    	} catch(KeeperException e) {
 							System.out.println(e.code());
 						} catch(Exception e) {
-							System.out.println("Make node:" + e.getMessage());
+							System.out.println(e.getMessage());
 						}
 				    }
 				}
@@ -218,7 +218,7 @@ public class worker_draft {
 	private static void listenStatus (final ZooKeeper zk, final String path) throws Exception {
 		byte b[] = zk.getData(
             path, 
-            new Watcher() {       // Anonymous Watcher
+            new Watcher() {
                 @Override
                 public void process(WatchedEvent event) {
                 	// Check for data modifications from the job tracker
@@ -232,35 +232,38 @@ public class worker_draft {
                         try {
                         	byte data_bytes[] = zk.getData(path, false, null);
 				    		String data = new String(data_bytes);
-				    		System.out.println("Data from status node " + path + " is: " + data);
-				    		// Tokenize the String
-							String[] tokens = data.split(",");
-							if(!(tokens.length==5)) {
-								System.out.println("Incorrect formatting: do nothing");
-							} else {
-								// Tokenize the string
-								WID           = tokens[0];
-								dictionaryURL = tokens[1];
-								pwdHash       = tokens[2];
-								status        = tokens[3];
-								answer        = tokens[4];
-								// Check if the worker matches our WID
-								if (WID.equals(workerID)) {
-									// Check if the worker has already processed/is processing this request 
-									if (status.equals("0")) {
-										System.out.println("Processing new job: \n\tWID \t\t= " + WID + "\n\tpwdHash \t= " + pwdHash + "\n\tdictionaryURL \t= " + dictionaryURL);
-										new workerThreadHandler_draft(zk, WID, path, dictionaryURL, pwdHash).start();
-									} 
-								}								
+				    		System.out.println("Data from status node " + path + " is:");
+				    		// Tokenize the String (per WID)
+				    		String[] WID_tokens = data.split(";");
+				    		for (int i=0; i<WID_tokens.length; i++)
+								System.out.println("\t" + WID_tokens[i]);
+							for (int i=0; i<WID_tokens.length; i++) {
+								String[] tokens = WID_tokens[i].split(",");
+								if(!(tokens.length==5)) {
+									System.out.println("Incorrect formatting for " + WID_tokens[i] + ", do nothing");
+								} else {
+									// Tokenize the string
+									WID           = tokens[0];
+									dictionaryURL = tokens[1];
+									pwdHash       = tokens[2];
+									status        = tokens[3];
+									answer        = tokens[4];
+									// Check if the worker matches our WID
+									if (WID.equals(workerID)) {
+										// Check if the worker has already processed/is processing this request 
+										if (status.equals("0")) {
+											System.out.println("Processing new job: \n\tWID \t\t= " + WID + "\n\tpwdHash \t= " + pwdHash + "\n\tdictionaryURL \t= " + dictionaryURL);
+											new workerThreadHandler_draft(zk, WID, path, dictionaryURL, pwdHash).start();
+										} 
+									}								
+								}
 							}
-							
-
 				    		// Set the watch again
 				    		listenStatus(zk, path);
                         } catch(KeeperException e) {
 							System.out.println(e.code());
 						} catch(Exception e) {
-							System.out.println("Make node:" + e.getMessage());
+							System.out.println(e.getMessage());
 						}	
                     }
                 }

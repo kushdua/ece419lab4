@@ -32,28 +32,38 @@ public class workerThreadHandler_draft extends Thread {
 		this.JID_path      = JID_path;
 		this.dictionaryURL = dictionaryURL;
 		this.pwdHash       = pwdHash;
-		System.out.println("Created new thread to handle a client connections");
+		System.out.println("[WorkerThread] Created new thread to handle a client connections");
 		
 		//UPDATE THAT YOU'VE STARTED
 		updateProgressInfo();
 	}
 	
 	public void run() {
+		//0 Time the process
+		long startTime = System.currentTimeMillis();
+
+		
 		//1 Execute the dictionary attack on the input hash
 		String password = findHash(dictionaryURL, pwdHash);
-		System.out.println("The password is: " + password);
+		
+		//2 Compute how long this took
+		long stopTime = System.currentTimeMillis();
+		long elapsedTime = stopTime - startTime;
 		
 		if(password.equals("NOT FOUND"))
 		{
-			foundAnswer=false;
+			foundAnswer=false;	
+			System.out.println("[WorkerThread] Did not find the password -- took " + elapsedTime + "ms");
 		}
 		else
 		{
 			foundAnswer=true;
+			System.out.println("[WorkerThread] Found the password: " + password + " -- took " + elapsedTime + "ms");
 			theAnswerIFound=password;
 		}
 		
-		//UPDATE THAT YOU'RE DONE
+		
+		//3 Update the JID node with the result
 		updateProgressInfo();
 	}
 	
@@ -68,7 +78,6 @@ public class workerThreadHandler_draft extends Thread {
 			String line;
 			while (((line = br.readLine()) != null) && (found == false)) {
 				if (getHash(line).equals(pwdHash)) {
-					System.out.println("FOUND!!!");
 					found = true;
 					pwd = line;
 				}
@@ -109,17 +118,21 @@ public class workerThreadHandler_draft extends Thread {
 		{
 			//CODE TO UPDATE JID PROGRESS ONCE A WORKER THREAD STARTS OR FINISHES
 			try {
-				Stat res=new Stat();
-				byte data_bytes[] = zk.getData(JID_path, false, res);
-				String dataIn = new String(data_bytes);
+				// This string holds the new value that we will write to the JID node
 				String output="";
-				//String[] lines=dataIn.split(";");
-				String data=dataIn;
-				//for(String data : lines){
-				// Tokenize the String
-					String[] tokens = data.split(",");
+				// Store the stat
+				Stat res=new Stat();
+				// Get the data at the JID node from zk
+				byte data_bytes[] = zk.getData(JID_path, false, res);
+				String data = new String(data_bytes);
+				
+				// Tokenize the String (per WID)
+				String[] WID_tokens = data.split(";");
+				for (int i=0; i<WID_tokens.length; i++) {
+					// Tokenize the String
+					String[] tokens = WID_tokens[i].split(",");
 					if(!(tokens.length==5)) {
-						System.out.println("Incorrect formatting: do nothing");
+						System.out.println("[WorkerThread] Incorrect formatting: do nothing");
 					} else {
 						// Tokenize the string
 						String WID           = tokens[0];
@@ -128,7 +141,7 @@ public class workerThreadHandler_draft extends Thread {
 						String status        = tokens[3];
 						String answer        = tokens[4];
 						// Check if the worker matches our WID
-						if (WID.equals(this.WID) && dictionaryURL.equals(this.dictionaryURL)) {
+						if (WID.equals(this.WID) && dictionaryURL.equals(this.dictionaryURL) && pwdHash.equals(this.pwdHash)) {
 							// Check if the worker has already processed/is processing this request 
 							if(status.equals("1")) {
 								if(foundAnswer==true)
@@ -151,13 +164,12 @@ public class workerThreadHandler_draft extends Thread {
 						}
 						else
 						{
-							output+=data;
+							output+=WID_tokens[i]+";";
 						}
 					}
-				//}
+				}
 				try
 				{
-					System.out.println("WorkerThread writing back to JID" + JID_path + " data " + output);
 					zk.setData(JID_path,output.getBytes(),res.getVersion());
 					updateSuccess=true;
 				}
@@ -175,7 +187,7 @@ public class workerThreadHandler_draft extends Thread {
 			} catch(KeeperException e) {
 				System.out.println(e.code());
 			} catch(Exception e) {
-				System.out.println("Make node:" + e.getMessage());
+				System.out.println(e.getMessage());
 			}
 		}
 	}
