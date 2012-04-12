@@ -99,7 +99,7 @@ public class JT {
     			{
     				IP=InetAddress.getLocalHost().getHostAddress();
     			}
-    			String location="IP:"+localPort;
+    			String location=IP+":"+localPort;
     			
                 System.out.println("Creating " + JT_PATH);
                 String path=zk.create(

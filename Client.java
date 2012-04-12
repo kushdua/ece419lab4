@@ -44,21 +44,24 @@ public class Client {
         while(true)
         {
 	        try {
-	            exists=zk.exists(
-	                myPath, 
-	                new Watcher() {       // Anonymous Watcher
-	                    @Override
-	                    public void process(WatchedEvent event) {
-	                        // check for event type NodeCreated
-	                        boolean isNodeCreated = event.getType().equals(EventType.NodeCreated);
-	                        // verify if this is the defined znode
-	                        boolean isMyPath = event.getPath().equals(myPath);
-	                        if (isNodeCreated && isMyPath) {
-	                            System.out.println(myPath + " created!");
-	                            nodeCreatedSignal.countDown();
-	                        }
-	                    }
-	                });
+	        	while(exists==null)
+	        	{
+		            exists=zk.exists(
+		                myPath, 
+		                new Watcher() {       // Anonymous Watcher
+		                    @Override
+		                    public void process(WatchedEvent event) {
+		                        // check for event type NodeCreated
+		                        boolean isNodeCreated = event.getType().equals(EventType.NodeCreated);
+		                        // verify if this is the defined znode
+		                        boolean isMyPath = event.getPath().equals(myPath);
+		                        if (isNodeCreated && isMyPath) {
+		                            System.out.println(myPath + " created!");
+		                            nodeCreatedSignal.countDown();
+		                        }
+		                    }
+		                });
+	        	}
 	
 	            
 	        } catch(KeeperException e) {
