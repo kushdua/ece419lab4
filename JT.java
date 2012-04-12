@@ -249,10 +249,12 @@ public class JT {
 				output+="";
 				
 				boolean updateSuccess=false;
+				boolean modifiedJobSpec=false;
 				int nextWI=0;
 
 				while(updateSuccess==false)
 				{
+					modifiedJobSpec=false;
 					//MODIFY JOB FILE
 					try {
 						byte[] jobValue=zk.getData("/status/"+client+"/"+job,
@@ -276,6 +278,7 @@ public class JT {
 										);
 									output+=","+values[1]+","+values[2]+","+
 											values[3]+","+values[4]+";";
+									modifiedJobSpec=true;
 								}
 								else
 								{
@@ -300,23 +303,31 @@ public class JT {
 					//}
 					
 					//UPLOAD UPDATED JOB FILE BACK
-					try
+					if(modifiedJobSpec==true)
 					{
-						zk.setData("/status/"+client+"/"+job,output.getBytes(),nodeStat.getVersion());
-						updateSuccess=true;
+						try
+						{
+							zk.setData("/status/"+client+"/"+job,output.getBytes(),nodeStat.getVersion());
+							updateSuccess=true;
+						}
+						catch(KeeperException ke)
+						{
+							if(ke.code().equals(Code.BADVERSION))
+							{
+								updateSuccess=false;
+							}
+							else if(ke.code().equals(Code.CONNECTIONLOSS))
+							{
+								updateSuccess=false;
+							}
+						} catch (InterruptedException e) {
+							updateSuccess=false;
+						}
 					}
-					catch(KeeperException ke)
+					else
 					{
-						if(ke.code().equals(Code.BADVERSION))
-						{
-							updateSuccess=false;
-						}
-						else if(ke.code().equals(Code.CONNECTIONLOSS))
-						{
-							updateSuccess=false;
-						}
-					} catch (InterruptedException e) {
-						updateSuccess=false;
+						//Proceed to next job... nothing to update in this one
+						updateSuccess=true;
 					}
 				}
 			}
