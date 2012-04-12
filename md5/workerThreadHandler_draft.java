@@ -133,16 +133,16 @@ public class workerThreadHandler_draft extends Thread {
 							if(status.equals("1")) {
 								if(foundAnswer==true)
 								{
-									output+=WID+","+dictionaryURL+","+pwdHash+","+"3"+theAnswerIFound+";";
+									output+=WID+","+dictionaryURL+","+pwdHash+","+"3,"+theAnswerIFound+";";
 								}
 								else
 								{
-									output+=WID+","+dictionaryURL+","+pwdHash+","+"2"+"-;";
+									output+=WID+","+dictionaryURL+","+pwdHash+","+"2,"+"-;";
 								}
 							}
 							else if(status.equals("0")) {
 								//Indicate we spawned this worker thread to work on this job...
-								output+=WID+","+dictionaryURL+","+pwdHash+","+"1"+"-;";
+								output+=WID+","+dictionaryURL+","+pwdHash+","+"1,"+"-;";
 							}
 							else
 							{
@@ -157,6 +157,7 @@ public class workerThreadHandler_draft extends Thread {
 				//}
 				try
 				{
+					System.out.println("WorkerThread writing back to JID" + JID_path + " data " + output);
 					zk.setData(JID_path,output.getBytes(),res.getVersion());
 					updateSuccess=true;
 				}
