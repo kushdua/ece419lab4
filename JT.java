@@ -3,6 +3,7 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.Watcher.Event.EventType;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.data.Stat;
@@ -15,6 +16,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
@@ -28,6 +30,8 @@ public class JT {
     public static String JOB_IN_PROGRESS="1";
     public static String JOB_COMPLETED_NOT_FOUND="2";
     public static String JOB_COMPLETED_FOUND="3";
+    
+	static List<String> WID_Set = new ArrayList<String>();
     
     public static void main(String[] args) {
   
@@ -129,6 +133,14 @@ public class JT {
             }
         }
 
+        try {
+        	List<String> children = listenClients(zk);
+        } catch(KeeperException e) {
+            System.out.println(e.code());
+        } catch(Exception e) {
+            System.out.println("Make node:" + e.getMessage());
+        }
+        
         //Start serverPort to listen on
 		try {
 			//Keep listening for connecting clients
@@ -152,6 +164,164 @@ public class JT {
 			e.printStackTrace();
 		}
     }
+	
+    // Listens to workers changes (WID)
+    private static List<String> listenClients (final ZooKeeper zk) throws Exception {
+		List<String> clients = zk.getChildren(
+			"/workers",
+			new Watcher() { 
+				public void process(WatchedEvent event) {
+				    // check for event type NodeChildrenChanged
+				    boolean NodeChildrenChanged  = event.getType().equals(EventType.NodeChildrenChanged);
+				    if (NodeChildrenChanged) {
+				    	System.out.println("Children of /workers have changed.");
+				    	try {
+				    		List<String> new_children  = listenClients(zk);
+				    	} catch(KeeperException e) {
+							System.out.println(e.code());
+						} catch(Exception e) {
+							System.out.println("Make node:" + e.getMessage());
+						}
+				    }
+				}
+			}
+		);
+		// Add the new nodes (if one client has been added)
+		int i = 0;
+		while(i < clients.size()) {
+        	if(!WID_Set.contains(clients.get(i))) {
+        		// Add the CID to the CID set
+        		WID_Set.add(clients.get(i));
+        		System.out.println("Added WID: " + clients.get(i));
+        	}
+        	i++;
+        }
+		
+		// Remove the newly removed nodes (if one client has been removed)
+		i = 0;
+		while(i < WID_Set.size()) {
+        	if(!clients.contains(WID_Set.get(i))) {
+        		String removedWorker=WID_Set.get(i);
+        		System.out.println("Removing CID: " + removedWorker);
+        		// Remove the CID from the CID set
+        		WID_Set.remove(i);
+        		
+        		rebalanceJobsAfterWorkerCrash(zk, removedWorker);
+        	}
+        	i++;
+        }
+		return clients;
+	}
+
+	private static void rebalanceJobsAfterWorkerCrash(ZooKeeper zk, String removedWorker) {
+		//GET STATUS
+		List<String> clients=null;
+		List<String> jobs=null;
+		
+		try {
+			clients = zk.getChildren(
+					"/status",
+					null);
+		} catch (KeeperException e) {
+			jobs=null;
+		} catch (InterruptedException e) {
+			jobs=null;
+		}
+		
+		for(String client : clients)
+		{
+			jobs=null;
+			String output="";
+			try {
+				jobs = zk.getChildren(
+						"/status",
+						null);
+			} catch (KeeperException e) {
+				jobs=null;
+			} catch (InterruptedException e) {
+				jobs=null;
+			}
+			
+			for(String job : jobs)
+			{
+				Stat nodeStat=new Stat();
+				boolean validJobData=true;
+				output+="";
+				
+				boolean updateSuccess=false;
+				int nextWI=0;
+
+				while(updateSuccess==false)
+				{
+					//MODIFY JOB FILE
+					try {
+						byte[] jobValue=zk.getData("/status/"+client+"/"+job,
+								false,
+								nodeStat);
+						String value=new String(jobValue);
+						String[] parts=value.split(";");
+						for(String part : parts)
+						{
+							String[] values=part.split(",");
+							if(values.length==5)
+							{
+								if(	values[0].equals(removedWorker) &&
+									(values[3].equals(JT.JOB_PENDING) ||
+									 values[3].equals(JT.JOB_IN_PROGRESS))
+								  )
+								{
+									nextWI=(int)(Math.random()*WID_Set.size());
+									output+=WID_Set.get(
+											(nextWI>=WID_Set.size())?0:nextWI
+										);
+									output+=","+values[1]+","+values[2]+","+
+											values[3]+","+values[4]+";";
+								}
+								else
+								{
+									output+=part;
+								}
+							}
+							else
+							{
+								validJobData=false;
+							}
+						}
+					} catch (KeeperException e) {
+						System.out.println("Could not retrieve job data.");
+					} catch (InterruptedException e) {
+						System.out.println("Could not unexpectedly retrieve job data.");
+					}
+
+					//Invalid job progress contents
+					//if(validJobData==false)
+					//{
+					//	output+="UNKNOWN\t\t-;";
+					//}
+					
+					//UPLOAD UPDATED JOB FILE BACK
+					try
+					{
+						zk.setData("/status/"+client+"/"+job,output.getBytes(),nodeStat.getVersion());
+						updateSuccess=true;
+					}
+					catch(KeeperException ke)
+					{
+						if(ke.code().equals(Code.BADVERSION))
+						{
+							updateSuccess=false;
+						}
+						else if(ke.code().equals(Code.CONNECTIONLOSS))
+						{
+							updateSuccess=false;
+						}
+					} catch (InterruptedException e) {
+						updateSuccess=false;
+					}
+				}
+			}
+		}
+	}
 }
 
 class ClientHandler extends Thread
@@ -323,7 +493,7 @@ class ClientHandler extends Thread
 					{
 						Stat nodeStat=null;
 						boolean validJobData=true;
-						output+="elem\t";
+						output+=elem+"\t";
 						try {
 							byte[] jobValue=zk.getData("/status/"+CID+"/"+elem,
 									false,
