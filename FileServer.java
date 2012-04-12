@@ -142,13 +142,41 @@ public class FileServer {
          */
         String filename = "md5/dictionary/lowercase.rand";
         int linenumbers=0;
+        int number_of_partitions = 10;
         try {
 			linenumbers = count(filename);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-        int partition = linenumbers/10;
+        int partitionsize = linenumbers/number_of_partitions;
+  	  	System.out.println ("Total lines:"+linenumbers);
+  	  	System.out.println ("Partition size is :"+partitionsize);
+        
+    	//child node creation code    
+	    String path="";
+	    try {
+            path=zk.create(
+                "/dictionary",         // Path of znode
+                null,           // Dictionary data to store
+                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
+                );
+           
+            if(path.equals("/dictionary"))
+            {
+                //Success
+            }
+        } catch(KeeperException e) {
+            if(e.code()==KeeperException.Code.NODEEXISTS)
+            {
+                //That's fine...
+            }
+        } catch(Exception e) {
+            System.out.println("Make node error:" + e.getMessage());
+            //Shouldn't be fine...
+        }
+        
         /*
          * Now read in the file and store the partitions to the disk
          */
@@ -160,28 +188,53 @@ public class FileServer {
         	  DataInputStream in = new DataInputStream(fstream);
         	  BufferedReader br = new BufferedReader(new InputStreamReader(in));
         	  String strLine;
-        	  int start_line = 1;
-        	  int partitionID = 1;
+        	  String save_location = "/tmp/";
+        	  int start_line = 0;
+        	  int partitionID = 0;
+        	  int part = 1;
         	  //Read File Line By Line
 			  BufferedWriter out = null;
         	  System.out.println ("Loop begin");
         	  while ((strLine = br.readLine()) != null)   {
         			  try {
-        				  if(start_line==partition*partitionID) {
-        					  out = new BufferedWriter(new FileWriter(filename+partitionID));
-        					  partitionID++;	
-        					  while(start_line!=partition*partitionID) {
+        				  if(start_line==partitionsize*partitionID && part<=number_of_partitions) {
+        					  out = new BufferedWriter(new FileWriter(save_location+"dict_"+partitionID+".dat"));
+        					  partitionID++;
+        					  out.write(strLine);
+    						  out.write("\n");
+    			        	  start_line++;
+        					  while(((strLine = br.readLine())!=null) && start_line<partitionsize*partitionID) {
         						  out.write(strLine);
+        						  out.write("\n");
         			        	  start_line++;
         					  }
             				  out.close();
+            				  part++;
+								path="";
+								String output=save_location+"dict_"+partitionID+".dat";
+								try {
+								     path=zk.create(
+								         "/dictionary/"+partitionID,         // Path of znode
+								         output.getBytes(),           // Dictionary data to store
+								         Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+								         CreateMode.EPHEMERAL_SEQUENTIAL   // Znode type, set to Ephemeral.
+								         );
+								 } catch(KeeperException e) {
+								     if(e.code()==KeeperException.Code.NODEEXISTS)
+								     {
+								         //Cannot happen with sequential... especially if ephemeral...
+								     }
+								 } catch(Exception e) {
+								     System.out.println("Make node error:" + e.getMessage());
+								     //WTF
+								 }
         				  	}
         				  }
         				  catch (IOException e)
         				  {
-        				  //System.out.println("Exception");
+        				  System.out.println("Exception");
         				  }
-        	  start_line++;
+        	  //start_line++;
         	  // Print the content on the console
         	 // System.out.println (strLine);
         	  }
@@ -192,7 +245,7 @@ public class FileServer {
         	    }catch (Exception e){//Catch exception if any
         	  System.err.println("Error: " + e.getMessage());
         	  }
-        
+
         //watcher = new Watcher() { // Anonymous Watcher
         //                    @Override
         //                    public void process(WatchedEvent event) {
