@@ -1,3 +1,6 @@
+// File: worker_draft.java
+// Author: TM
+
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -209,7 +212,7 @@ public class worker_draft {
 		
 	}
 	
-	
+	// Listens to JID status updates
 	private static void listenStatus (final ZooKeeper zk, final String path) throws Exception {
 		byte b[] = zk.getData(
             path, 
@@ -219,10 +222,37 @@ public class worker_draft {
                 	// Check for data modifications from the job tracker
                     boolean NodeDataChanged = event.getType().equals(EventType.NodeDataChanged);
                     if (NodeDataChanged) {
+                    	String WID           = "";
+                    	String dictionaryURL = "";
+                    	String pwdHash       = "";
+                    	String status        = "";
+                    	String answer        = "";
                         try {
                         	byte data_bytes[] = zk.getData(path, false, null);
 				    		String data = new String(data_bytes);
 				    		System.out.println("Data from status node " + path + " is: " + data);
+				    		// Tokenize the String
+							String[] tokens = data.split(",");
+							if(!(tokens.length==5)) {
+								System.out.println("Incorrect formatting: do nothing");
+							} else {
+								// Tokenize the string
+								WID           = tokens[0];
+								dictionaryURL = tokens[1];
+								pwdHash       = tokens[2];
+								status        = tokens[3];
+								answer        = tokens[4];
+								// Check if the worker matches our WID
+								if (WID.equals(workerID)) {
+									// Check if the worker has already processed/is processing this request 
+									if (status.equals("0")) {
+										System.out.println("Processing new job: \n\tWID \t\t= " + WID + "\n\tpwdHash \t= " + pwdHash + "\n\tdictionaryURL \t= " + dictionaryURL);
+										new workerThreadHandler_draft(zk, WID, path, dictionaryURL, pwdHash).start();
+									} 
+								}								
+							}
+							
+
 				    		// Set the watch again
 				    		listenStatus(zk, path);
                         } catch(KeeperException e) {
@@ -236,48 +266,4 @@ public class worker_draft {
             null);
 	}
     
-    private static String findHash(String hash) {
-	
-		String URL = "dictionary/lowercase.rand";
-		String pwd = "";
-		boolean found = false;
-		try {
-			FileInputStream fstream = new FileInputStream(URL);
-			DataInputStream in = new DataInputStream(fstream);
-			BufferedReader br = new BufferedReader(new InputStreamReader(in));
-			String line;
-			while (((line = br.readLine()) != null) && (found == false)) {
-				if (getHash(line).equals(hash)) {
-					System.out.println("FOUND!!!");
-					found = true;
-					pwd = line;
-				}
-			}
-			
-			in.close();
-		} catch (Exception e) {
-			/* just print the error stack and exit. */
-			e.printStackTrace();
-			System.exit(1);
-		}
-		if (found == false) {
-			pwd = "NOT FOUND";
-		}
-		
-		return pwd;
-	}
-	
-    public static String getHash(String word) {
-
-        String hash = null;
-        try {
-            MessageDigest md5 = MessageDigest.getInstance("MD5");
-            BigInteger hashint = new BigInteger(1, md5.digest(word.getBytes()));
-            hash = hashint.toString(16);
-            while (hash.length() < 32) hash = "0" + hash;
-        } catch (NoSuchAlgorithmException nsae) {
-            // ignore
-        }
-        return hash;
-    }
 }
