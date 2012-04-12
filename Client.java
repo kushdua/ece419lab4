@@ -27,8 +27,8 @@ public class Client {
 		 * needs to lookup for the primary jobtracker information on the first place
 		 */
 		//System.out.println("The argument length is: "+args.length);
-		if (args.length != 1) {
-            System.out.println("Usage: java -classpath example1/lib/zookeeper-3.3.2.jar:example1/lib/log4j-1.2.15.jar:. Client zkServer:clientPort");
+		if (args.length != 2) {
+            System.out.println("Usage: java -classpath example1/lib/zookeeper-3.3.2.jar:example1/lib/log4j-1.2.15.jar:. Client zkServer:clientPort <client ID>");
             return;
         }
     
@@ -75,7 +75,11 @@ public class Client {
 	        
 	        
 	
-	        if(exists==null)
+	        if(exists==null)						//	//in the begening pass the id to the Jobtracker
+				//	pts.type = BrokerPacket.BROKER_passid;
+				//	pts.symbol = userInput.trim();
+				//	/* send the new server packet */
+				//	out.writeObject(pts);
 	        {
 		        try{       
 		            nodeCreatedSignal.await();
@@ -114,13 +118,13 @@ public class Client {
 				/* variables for hostname/port */
 				String hostname = "localhost";
 				int port = 4444;
-				
 				//Open connection only if appropriate command line arguments are provided
 				//exit otherwise...
-				if(args.length == 1 ) {
+				if(args.length == 2 ) {
 					String[] datasplit = thedata.split(":");
 					hostname = datasplit[0];
 					port = Integer.parseInt(datasplit[1]);
+					
 				} else {
 					System.err.println("ERROR: Invalid arguments!");
 					System.exit(-1);
@@ -153,22 +157,31 @@ public class Client {
 			{
 				//Keep getting user input and transmitting to broker until client quits ('x')
 				try {
+					
+					//in the begening pass the id to the Jobtracker
+					BrokerPacket pts=new BrokerPacket();
+					pts.type = BrokerPacket.BROKER_passid;
+					pts.symbol = args[1];
+					/* send the new server packet */
+					out.writeObject(pts);
+					
 					while ((userInput = stdIn.readLine()) != null
 							&& !userInput.trim().equals("x")) {
 	
 						/*
 						 * This code is for sending packets to the JOB TRACKER
 						 */
-						BrokerPacket pts = new BrokerPacket();
-						if(userInput.contains("passid"))
-						{
-							//in the begening pass the id to the Jobtracker
-							pts.type = BrokerPacket.BROKER_passid;
-							pts.symbol = userInput.trim();
-							/* send the new server packet */
-							out.writeObject(pts);
-						}
-						else if(userInput.contains("submitquery")) {
+						pts = new BrokerPacket();
+						//if(userInput.contains("passid"))
+						//{
+						//	//in the begening pass the id to the Jobtracker
+						//	pts.type = BrokerPacket.BROKER_passid;
+						//	pts.symbol = userInput.trim();
+						//	/* send the new server packet */
+						//	out.writeObject(pts);
+						//}
+						//else if(userInput.contains("submitquery")) {
+						if(userInput.contains("submitquery")) {
 							//Send query request to JT
 							pts.type = BrokerPacket.BROKER_submitquery;
 							pts.symbol = userInput.trim();
@@ -208,7 +221,7 @@ public class Client {
 					}
 	
 					/* tell server that i'm quitting */
-					BrokerPacket pts = new BrokerPacket();
+					pts = new BrokerPacket();
 					pts.type = BrokerPacket.BROKER_BYE;
 					out.writeObject(pts);
 			
