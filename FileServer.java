@@ -8,6 +8,8 @@ import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.Watcher.Event.EventType;
 
+import java.io.*;
+import java.util.*;
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -20,7 +22,6 @@ public class FileServer {
     String myPath = "/fileserver";
     ZkConnector zkc;
     Watcher watcher;
-    String filename = "/md5/dictionary/lowercase.rand";
     static CountDownLatch nodeDeletedSignal = new CountDownLatch(1);
 
     public static void main(String[] args) {
@@ -34,15 +35,19 @@ public class FileServer {
  
         System.out.println("Sleeping...");
         try {
-            Thread.sleep(500);
+            Thread.sleep(50);
         } catch (Exception e) {}
         
         t.checkpath();
         
         System.out.println("Sleeping...");
         while (true) {
-            try{ Thread.sleep(5000); } catch (Exception e) {}
+           // try{ Thread.sleep(5000); } catch (Exception e) {}
         }
+        
+        
+        
+        
         
     }
 
@@ -129,6 +134,64 @@ public class FileServer {
             }
         }
 
+        /* --------------- CODE FLOW ------------
+         * 1.Calculate file partition estimates
+         * 2.Read in the file partitions
+         * 3.Store the file partitions back to the disk 
+         * 4. Put the URL locations in znodes under /directory 
+         */
+        String filename = "md5/dictionary/lowercase.rand";
+        int linenumbers=0;
+        try {
+			linenumbers = count(filename);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        int partition = linenumbers/10;
+        /*
+         * Now read in the file and store the partitions to the disk
+         */
+        try{
+        	  // Open the file that is the first 
+        	  // command line parameter
+        	  FileInputStream fstream = new FileInputStream(filename);
+        	  // Get the object of DataInputStream
+        	  DataInputStream in = new DataInputStream(fstream);
+        	  BufferedReader br = new BufferedReader(new InputStreamReader(in));
+        	  String strLine;
+        	  int start_line = 1;
+        	  int partitionID = 1;
+        	  //Read File Line By Line
+			  BufferedWriter out = null;
+        	  System.out.println ("Loop begin");
+        	  while ((strLine = br.readLine()) != null)   {
+        			  try {
+        				  if(start_line==partition*partitionID) {
+        					  out = new BufferedWriter(new FileWriter(filename+partitionID));
+        					  partitionID++;	
+        					  while(start_line!=partition*partitionID) {
+        						  out.write(strLine);
+        			        	  start_line++;
+        					  }
+            				  out.close();
+        				  	}
+        				  }
+        				  catch (IOException e)
+        				  {
+        				  //System.out.println("Exception");
+        				  }
+        	  start_line++;
+        	  // Print the content on the console
+        	 // System.out.println (strLine);
+        	  }
+        	  System.out.println ("END OF LOOP");
+
+        	  //Close the input stream
+        	  in.close();
+        	    }catch (Exception e){//Catch exception if any
+        	  System.err.println("Error: " + e.getMessage());
+        	  }
         
         //watcher = new Watcher() { // Anonymous Watcher
         //                    @Override
@@ -148,28 +211,6 @@ public class FileServer {
                         CreateMode.EPHEMERAL   // Znode type, set to EPHEMERAL.
                         );
             if (ret == Code.OK) System.out.println("the boss!");
-            
-            /* --------------- CODE FLOW ------------
-             * 1.Calculate file partition estimates
-             * 2.Read in the file partitions
-             * 3.Store the file partitions back to the disk 
-             * 4. Put the URL locations in znodes under /directory 
-             */
-            int linenumbers=0;
-            try {
-				linenumbers = count(filename);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-            int partition = linenumbers/10;
-            /*
-             * TODO: add the partition code and Bob's email code here (ELECTION CODE'S BEEN ADDED ABOVE)
-             */
-            
-            
-            
-            
         } 
     }
 
@@ -189,7 +230,7 @@ public class FileServer {
         }
     }
     
-    public int count(String filename) throws IOException {
+    public static int count(String filename) throws IOException {
         InputStream is = new BufferedInputStream(new FileInputStream(filename));
         try {
             byte[] c = new byte[1024];
