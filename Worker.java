@@ -198,6 +198,10 @@ public class Worker {
         		JID_list.add(jobs.get(i));
         		// Set a watch on the JID node
         		listenStatus(zk, path + "/" + jobs.get(i));
+        		// Process the JID node
+        		byte data_bytes[] = zk.getData(path, false, null);
+				String data = new String(data_bytes);
+				processJob(zk, path, data);
         		System.out.println("Added JID: " + jobs.get(i) + " to CID " + CID);
         	}
         	i++;
@@ -225,42 +229,13 @@ public class Worker {
                 	// Check for data modifications from the job tracker
                     boolean NodeDataChanged = event.getType().equals(EventType.NodeDataChanged);
                     if (NodeDataChanged) {
-                    	String WID           = "";
-                    	String dictionaryURL = "";
-                    	String pwdHash       = "";
-                    	String status        = "";
-                    	String answer        = "";
                         try {
+							// Process the job if necessary
                         	byte data_bytes[] = zk.getData(path, false, null);
-				    		String data = new String(data_bytes);
-				    		System.out.println("Data from status node " + path + " is:");
-				    		// Tokenize the String (per WID)
-				    		String[] WID_tokens = data.split(";");
-				    		for (int i=0; i<WID_tokens.length; i++)
-								System.out.println("\t" + WID_tokens[i]);
-							for (int i=0; i<WID_tokens.length; i++) {
-								String[] tokens = WID_tokens[i].split(",");
-								if(!(tokens.length==5)) {
-									System.out.println("Incorrect formatting for " + WID_tokens[i] + ", do nothing");
-								} else {
-									// Tokenize the string
-									WID           = tokens[0];
-									dictionaryURL = tokens[1];
-									pwdHash       = tokens[2];
-									status        = tokens[3];
-									answer        = tokens[4];
-									// Check if the worker matches our WID
-									if (WID.equals(workerID)) {
-										// Check if the worker has already processed/is processing this request 
-										if (status.equals("0")) {
-											System.out.println("Processing new job: \n\tWID \t\t= " + WID + "\n\tpwdHash \t= " + pwdHash + "\n\tdictionaryURL \t= " + dictionaryURL);
-											new WorkerThreadHandler(zk, WID, path, dictionaryURL, pwdHash).start();
-										} 
-									}								
-								}
-							}
-				    		// Set the watch again
-				    		listenStatus(zk, path);
+							String data = new String(data_bytes);
+							processJob(zk, path, data);
+							// Set the watch again
+							listenStatus(zk, path);
                         } catch(KeeperException e) {
 							System.out.println(e.code());
 						} catch(Exception e) {
@@ -271,5 +246,41 @@ public class Worker {
             },
             null);
 	}
+	
+	// Processes the JID node contents
+	private static void processJob (final ZooKeeper zk, final String JID_path, final String data) throws Exception {
+    	String WID           = "";
+    	String dictionaryURL = "";
+    	String pwdHash       = "";
+    	String status        = "";
+    	String answer        = "";
+		System.out.println("Data from status node " + JID_path + " is:");
+		// Tokenize the String (per WID)
+		String[] WID_tokens = data.split(";");
+		for (int i=0; i<WID_tokens.length; i++)
+			System.out.println("\t" + WID_tokens[i]);
+		for (int i=0; i<WID_tokens.length; i++) {
+			String[] tokens = WID_tokens[i].split(",");
+			if(!(tokens.length==5)) {
+				System.out.println("Incorrect formatting for " + WID_tokens[i] + ", do nothing");
+			} else {
+				// Tokenize the string
+				WID           = tokens[0];
+				dictionaryURL = tokens[1];
+				pwdHash       = tokens[2];
+				status        = tokens[3];
+				answer        = tokens[4];
+				// Check if the worker matches our WID
+				if (WID.equals(workerID)) {
+					// Check if the worker has already processed/is processing this request 
+					if (status.equals("0")) {
+						System.out.println("Processing new job: \n\tWID \t\t= " + WID + "\n\tpwdHash \t= " + pwdHash + "\n\tdictionaryURL \t= " + dictionaryURL);
+						new WorkerThreadHandler(zk, WID, JID_path, dictionaryURL, pwdHash).start();
+					} 
+				}								
+			}
+		}	
+	}
+	
     
 }
