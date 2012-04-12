@@ -120,7 +120,7 @@ public class Client {
 				int port = 4444;
 				//Open connection only if appropriate command line arguments are provided
 				//exit otherwise...
-				if(args.length == 1 ) {
+				if(args.length == 2 ) {
 					String[] datasplit = thedata.split(":");
 					hostname = datasplit[0];
 					port = Integer.parseInt(datasplit[1]);
