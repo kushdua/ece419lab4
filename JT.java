@@ -24,7 +24,10 @@ public class JT {
     static String JT_PATH="/jobtracker";
     private static int localPort=-1;
     
-    public static String ANSWER_NOT_FOUND="No match was found";
+    public static String JOB_PENDING="0";
+    public static String JOB_IN_PROGRESS="1";
+    public static String JOB_COMPLETED_NOT_FOUND="2";
+    public static String JOB_COMPLETED_FOUND="3";
     
     public static void main(String[] args) {
   
@@ -154,7 +157,7 @@ public class JT {
 class ClientHandler extends Thread
 {
 	private Socket socket = null;
-	private int CID=-1;
+	private String CID="";
 	public ObjectOutputStream toPlayer=null;
 	public ObjectInputStream fromplayer=null;
 	ZooKeeper zk=null;
@@ -171,7 +174,7 @@ class ClientHandler extends Thread
 			while((fromclientpacket = (BrokerPacket) fromplayer.readObject())!=null){
 				if(fromclientpacket.type==BrokerPacket.BROKER_passid)
 				{
-					CID=Integer.parseInt(fromclientpacket.symbol);
+					CID=fromclientpacket.symbol;
 			    	//Create znode
 			        try {
 			            System.out.println("Creating " + CID);
@@ -260,7 +263,7 @@ class ClientHandler extends Thread
 								toPlayer.writeObject(toclient);
 							}
 							
-							output+=workers.get(i)+","+new String(dictURI)+","+inputHash+",0,"+JT.ANSWER_NOT_FOUND+"\n";
+							output+=workers.get(i)+","+new String(dictURI)+","+inputHash+","+JT.JOB_PENDING+",-;";
 						}
 					}
 
@@ -305,7 +308,7 @@ class ClientHandler extends Thread
 				{
 					//GET STATUS
 					List<String> jobs=null;
-					String output="JOB ID\tSTATUS\\tPASSWORDn";
+					String output="JOB ID\tSTATUS\t\tPASSWORDn";
 					try {
 						jobs = zk.getChildren(
 								"/status/"+CID,
@@ -327,21 +330,22 @@ class ClientHandler extends Thread
 									nodeStat);
 							String value=new String(jobValue);
 							int total=0, completed=0;
-							String[] parts=value.split("\n");
+							String[] parts=value.split(";");
 							for(String part : parts)
 							{
 								String[] values=part.split(",");
 								if(values.length==5)
 								{
 									total++;
-									if(values[3].equals("1"))
+									if(	values[3].equals(JT.JOB_COMPLETED_FOUND) ||
+										values[3].equals(JT.JOB_COMPLETED_NOT_FOUND))
 									{
 										completed++;
 									}
 									
-									if(!values[4].equals(JT.ANSWER_NOT_FOUND))
+									if(values[3].equals(JT.JOB_COMPLETED_FOUND))
 									{
-										output+="COMPLETE\t\t"+values[4]+"\n";
+										output+="COMPLETE\t\t"+values[4]+";";
 										break;
 									}
 								}
@@ -353,22 +357,22 @@ class ClientHandler extends Thread
 							//Add progress + output here...
 							if(total==completed)
 							{
-								output+="COMPLETE\t\t-\n";
+								output+="COMPLETE\t\t-;";
 							}
 							else
 							{
-								output+="IN PROGRESS\t\t-\n";
+								output+=((completed*100)/total)+"%\t\t-;";
 							}
 						} catch (KeeperException e) {
-							output+="UNKNOWN\t\t-\n";
+							output+="UNKNOWN\t\t-;";
 						} catch (InterruptedException e) {
-							output+="UNKNOWN\t\t-\n";
+							output+="UNKNOWN\t\t-;";
 						}
 
 						//Invalid job progress contents
 						if(validJobData==false)
 						{
-							output+="UNKNOWN\t-\n";
+							output+="UNKNOWN\t\t-;";
 						}
 						
 						//Send results to client
