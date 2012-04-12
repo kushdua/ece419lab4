@@ -141,7 +141,25 @@ public class JT {
             System.out.println("Make node:" + e.getMessage());
         }
         
-        //Start serverPort to listen on
+        
+        try
+        {
+        	String path=zk.create(
+	                "/status",         // Path of znode
+	                null,           // Data not needed.
+	                Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+	                CreateMode.PERSISTENT   // Znode type, set to Ephemeral.
+	                );
+        } catch(KeeperException e) {
+        	if(e.code()==KeeperException.Code.NODEEXISTS)
+        	{
+        		//Do nothing... client used our services before :-)
+        	}
+        } catch(Exception e) {
+        	//Send error message below to the client...
+        }
+        
+        //Start listening on serverPort
 		try {
 			//Keep listening for connecting clients
 			while(true)
@@ -358,7 +376,7 @@ class ClientHandler extends Thread
 					CID=fromclientpacket.symbol;
 			    	//Create znode
 			        try {
-			            System.out.println("Creating " + CID);
+			            System.out.println("Creating " + CID);			        
 			            String path=zk.create(
 			                "/status/"+CID,         // Path of znode
 			                null,           // Data not needed.
