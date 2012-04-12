@@ -102,7 +102,7 @@ public class JT {
             try {
             	String IP=serverSocket.getInetAddress().getHostAddress();//getHostName();
         		
-    			if(IP.equals("localhost") || IP.equals("127.0.0.1"))
+    			if(IP.equals("localhost") || IP.equals("127.0.0.1") || IP.equals("0.0.0.0"))
     			{
     				IP=InetAddress.getLocalHost().getHostAddress();
     			}
@@ -397,6 +397,11 @@ class ClientHandler extends Thread
 			        	if(e.code()==KeeperException.Code.NODEEXISTS)
 			        	{
 			        		//Do nothing... client used our services before :-)
+							BrokerPacket toclient=new BrokerPacket();
+					        toclient.type=BrokerPacket.BROKER_passid;
+							toclient.symbol="Successfully recorded your client ID.";
+							toPlayer.writeObject(toclient);
+			        		continue;
 			        	}
 			        } catch(Exception e) {
 			        	//Send error message below to the client...
@@ -418,7 +423,7 @@ class ClientHandler extends Thread
 					List<String> workers=null;
 					try {
 						workers = zk.getChildren(
-								"/workers/",
+								"/workers",
 								null);
 					} catch (KeeperException e) {
 						workers=null;
