@@ -211,13 +211,14 @@ public class FileServer {
             				  out.close();
             				  part++;
 								path="";
-								String output=save_location+"dict_"+partitionID+".dat";
+								int id = partitionID-1;
+								String output=save_location+"dict_"+id+".dat";
 								try {
 								     path=zk.create(
 								         "/dictionary/"+partitionID,         // Path of znode
 								         output.getBytes(),           // Dictionary data to store
 								         Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
-								         CreateMode.EPHEMERAL_SEQUENTIAL   // Znode type, set to Ephemeral.
+								         CreateMode.EPHEMERAL   // Znode type, set to Ephemeral.
 								         );
 								 } catch(KeeperException e) {
 								     if(e.code()==KeeperException.Code.NODEEXISTS)
