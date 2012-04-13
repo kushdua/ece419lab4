@@ -44,8 +44,8 @@ public class Client {
         while(true)
         {
 	        try {
-	        	while(exists==null)
-	        	{
+	        	//while(exists==null)
+	        	//{
 		            exists=zk.exists(
 		                myPath, 
 		                new Watcher() {       // Anonymous Watcher
@@ -56,12 +56,12 @@ public class Client {
 		                        // verify if this is the defined znode
 		                        boolean isMyPath = event.getPath().equals(myPath);
 		                        if (isNodeCreated && isMyPath) {
-		                            System.out.println(myPath + " created!");
+		                            //System.out.println(myPath + " created!");
 		                            nodeCreatedSignal.countDown();
 		                        }
 		                    }
 		                });
-	        	}
+	        	//}
 	
 	            
 	        } catch(KeeperException e) {
@@ -70,7 +70,7 @@ public class Client {
 	            System.out.println(e.getMessage());
 	        }
 	                            
-	        System.out.println("Waiting for " + myPath + " to be created ...");
+	        //System.out.println("Waiting for " + myPath + " to be created ...");
 			//System.out.println("Please wait while we connect to Job Tracker");
 	        
 	        
@@ -81,10 +81,11 @@ public class Client {
 				//	/* send the new server packet */
 				//	out.writeObject(pts);
 	        {
-		        try{       
+	        	System.out.println("Waiting for JT to come online.");
+		        try{
 		            nodeCreatedSignal.await();
 		        } catch(Exception e) {
-		            System.out.println(e.getMessage());
+		            //System.out.println(e.getMessage());
 		        }
 	        }
 	        
@@ -95,14 +96,16 @@ public class Client {
 	        } catch (KeeperException e) {
 	            // We don't need to worry about recovering now. The watch
 	            // callbacks will kick off any exception handling
-	            e.printStackTrace();
+	            //e.printStackTrace();
+	        	nodeCreatedSignal=new CountDownLatch(1);
+	        	exists=null;
 	        } catch (InterruptedException e) {
 	            return;
 	        }
 	
 	        String thedata=new String(b);
 	        //System.out.println(thedata);
-	        System.out.println("Connecting to the Jobtracker Please wait");
+	        //System.out.println("Connecting to the Jobtracker Please wait");
 	        
 	        /*
 	         * AT this time primary Job tracker has been created and the TCP/IP 
@@ -135,13 +138,17 @@ public class Client {
 				in = new ObjectInputStream(brokerSocket.getInputStream());
 	
 			} catch (UnknownHostException e) {
-				System.err.println("ERROR: Don't know where to connect!!");
+				//System.err.println("ERROR: Don't know where to connect!!");
 				//Try to get new address from JT and reconnect
+	        	nodeCreatedSignal=new CountDownLatch(1);
+	        	exists=null;
 				continue;
 				//System.exit(1);
 			} catch (IOException e) {
-				System.err.println("ERROR: Couldn't get I/O for the connection.");
+				//System.err.println("ERROR: Couldn't get I/O for the connection.");
 				//Try to get new address from JT and reconnect
+	        	nodeCreatedSignal=new CountDownLatch(1);
+	        	exists=null;
 				continue;
 				//System.exit(1);
 			}
@@ -235,9 +242,13 @@ public class Client {
 					System.exit(-1);
 				} catch (IOException e) {
 					//Try to get new address from JT and reconnect
+		        	nodeCreatedSignal=new CountDownLatch(1);
+		        	exists=null;
 					break;
 				} catch (ClassNotFoundException e) {
 					//Try to get new address from JT and reconnect
+		        	nodeCreatedSignal=new CountDownLatch(1);
+		        	exists=null;
 					break;
 				}
 			}

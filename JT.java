@@ -269,6 +269,8 @@ public class JT {
 				boolean updateSuccess=false;
 				boolean modifiedJobSpec=false;
 				int nextWI=0;
+				
+				System.out.println("Trying to get value of job "+job);
 
 				while(updateSuccess==false)
 				{
@@ -515,6 +517,7 @@ class ClientHandler extends Thread
 					//GET STATUS
 					List<String> jobs=null;
 					String output="JOB ID\tSTATUS\t\tPASSWORDn";
+
 					try {
 						jobs = zk.getChildren(
 								"/status/"+CID,
@@ -523,6 +526,15 @@ class ClientHandler extends Thread
 						jobs=null;
 					} catch (InterruptedException e) {
 						jobs=null;
+					}
+
+					if(jobs.size()==0)
+					{
+						//No Jobs => Return pretty message to client
+						BrokerPacket toclient=new BrokerPacket();
+				        toclient.type=BrokerPacket.BROKER_jobqueue;
+						toclient.symbol="No Jobs found.";
+						toPlayer.writeObject(toclient);
 					}
 					
 					for(String elem : jobs)
