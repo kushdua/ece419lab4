@@ -195,7 +195,9 @@ public class Client {
 								/* send the new server packet */
 								out.writeObject(pts);
 						} else {
-						System.out.println("Invalid Argument, Please Try Again");
+							System.out.println("Invalid Argument, Please Try Again");
+							System.out.print("> ");
+							continue;
 						}
 	
 						

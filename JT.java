@@ -368,6 +368,7 @@ class ClientHandler extends Thread
 
 	public void run() {
 		//Client connected => listen for messages
+		boolean createdID=false;
         try {
 			BrokerPacket fromclientpacket = null;
 			while((fromclientpacket = (BrokerPacket) fromplayer.readObject())!=null){
@@ -387,31 +388,38 @@ class ClientHandler extends Thread
 			            System.out.println("Created CID znode "+path);
 			            if(path.equals("/status/"+CID))
 			            {
-							BrokerPacket toclient=new BrokerPacket();
-					        toclient.type=BrokerPacket.BROKER_passid;
-							toclient.symbol="Successfully recorded your client ID.";
-							toPlayer.writeObject(toclient);
-							continue;
+			            	createdID=true;
+							//BrokerPacket toclient=new BrokerPacket();
+					        //toclient.type=BrokerPacket.BROKER_passid;
+							//toclient.symbol="Successfully recorded your client ID.";
+							//toPlayer.writeObject(toclient);
+							
 			            }
 			        } catch(KeeperException e) {
 			        	if(e.code()==KeeperException.Code.NODEEXISTS)
 			        	{
+			            	createdID=true;
 			        		//Do nothing... client used our services before :-)
-							BrokerPacket toclient=new BrokerPacket();
-					        toclient.type=BrokerPacket.BROKER_passid;
-							toclient.symbol="Successfully recorded your client ID.";
-							toPlayer.writeObject(toclient);
-			        		continue;
+							//BrokerPacket toclient=new BrokerPacket();
+					        //toclient.type=BrokerPacket.BROKER_passid;
+							//toclient.symbol="Successfully recorded your client ID.";
+							//toPlayer.writeObject(toclient);
 			        	}
 			        } catch(Exception e) {
 			        	//Send error message below to the client...
 			        }
 			        
-
-					BrokerPacket toclient=new BrokerPacket();
-			        toclient.type=BrokerPacket.BROKER_passid;
-					toclient.symbol="Error: Could not record your client ID.";
-					toPlayer.writeObject(toclient);
+			        if(createdID==false)
+			        {
+			        	toPlayer.close();
+			        	fromplayer.close();
+			        	socket.close();
+			        	return;
+			        }
+					//BrokerPacket toclient=new BrokerPacket();
+			        //toclient.type=BrokerPacket.BROKER_passid;
+					//toclient.symbol="Error: Could not record your client ID.";
+					//toPlayer.writeObject(toclient);
 				}
 				else if(fromclientpacket.type==BrokerPacket.BROKER_submitquery)
 				{
