@@ -506,10 +506,10 @@ class ClientHandler extends Thread
 			        }
 			        
 			        //Send results to client
-			        int JID=Integer.parseInt(path.substring(path.lastIndexOf('/')).trim());
+			        //int JID=Integer.parseInt(path.substring(path.lastIndexOf('/')+1).trim());
 			        BrokerPacket toclient=new BrokerPacket();
 			        toclient.type=BrokerPacket.BROKER_submitquery;
-					toclient.symbol="Successfully submitted job "+JID+".";
+					toclient.symbol="Successfully submitted job.";
 					toPlayer.writeObject(toclient);
 				}
 				else if(fromclientpacket.type==BrokerPacket.BROKER_jobqueue)
