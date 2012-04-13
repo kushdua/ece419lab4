@@ -106,21 +106,18 @@ public class Worker {
         
         
         
-        System.out.println("Just chillin'...");
+        System.out.println("Prepared to do work...");
         
         try{       
             nodeCreatedSignal.await();
         } catch(Exception e) {
             System.out.println(e.getMessage());
         }
-
-        System.out.println("DONE");
     }
     
     // Listens to new clients (CID)
     private static List<String> listenClients (final ZooKeeper zk, final String path) throws Exception {
-		List<String> clients 
-= zk.getChildren(
+    	List<String> clients = zk.getChildren(
 			path,
 			new Watcher() { 
 				public void process(WatchedEvent event) {
@@ -131,7 +128,7 @@ public class Worker {
 				    	try {
 				    		List<String> new_children  = listenClients(zk, path);
 				    	} catch(KeeperException e) {
-							System.out.println(e.code());
+							//System.out.println(e.code());
 						} catch(Exception e) {
 							System.out.println(e.getMessage());
 						}
@@ -139,9 +136,11 @@ public class Worker {
 				}
 			}
 		);
+    	
 		// Add the new nodes (if one client has been added)
 		int i = 0;
 		while(i < clients.size()) {
+			System.out.println("Adding in CID child "+clients.get(i));
         	if(!CID_Set.contains(clients.get(i))) {
         		// Add the CID to the CID set
         		CID_Set.add(clients.get(i));
@@ -199,9 +198,9 @@ public class Worker {
         		// Set a watch on the JID node
         		listenStatus(zk, path + "/" + jobs.get(i));
         		// Process the JID node
-        		byte data_bytes[] = zk.getData(path, false, null);
+        		byte data_bytes[] = zk.getData(path + "/" + jobs.get(i), false, null);
 				String data = new String(data_bytes);
-				processJob(zk, path, data);
+				processJob(zk, path + "/" + jobs.get(i), data);
         		System.out.println("Added JID: " + jobs.get(i) + " to CID " + CID);
         	}
         	i++;
@@ -221,6 +220,7 @@ public class Worker {
 	
 	// Listens to JID status updates
 	private static void listenStatus (final ZooKeeper zk, final String path) throws Exception {
+		
 		byte b[] = zk.getData(
             path, 
             new Watcher() {

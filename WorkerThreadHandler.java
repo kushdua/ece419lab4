@@ -126,6 +126,8 @@ public class WorkerThreadHandler extends Thread {
 				byte data_bytes[] = zk.getData(JID_path, false, res);
 				String data = new String(data_bytes);
 				
+				//System.out.println("DIRT: "+data);
+				
 				// Tokenize the String (per WID)
 				String[] WID_tokens = data.split(";");
 				for (int i=0; i<WID_tokens.length; i++) {
@@ -159,7 +161,8 @@ public class WorkerThreadHandler extends Thread {
 							}
 							else
 							{
-								//WTF.. Someone changed this for our thread.. Multiple threads with same ID?
+								//Someone else was originally assigned but now we are.. we think.
+								output+=WID_tokens[i]+";";
 							}
 						}
 						else
@@ -178,10 +181,12 @@ public class WorkerThreadHandler extends Thread {
 					if(ke.code().equals(Code.BADVERSION))
 					{
 						updateSuccess=false;
+						System.out.println("[WorkerThread] BADVERSION! Try again." );
 					}
 					else if(ke.code().equals(Code.CONNECTIONLOSS))
 					{
 						updateSuccess=false;
+						System.out.println("[WorkerThread] CONNECTIONLOSS! Try again.");
 					}
 				}
 			} catch(KeeperException e) {

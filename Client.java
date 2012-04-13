@@ -191,14 +191,14 @@ public class Client {
 						if(userInput.contains("submitquery")) {
 							//Send query request to JT
 							pts.type = BrokerPacket.BROKER_submitquery;
-							pts.symbol = userInput.trim();
+							pts.symbol = userInput.substring(userInput.lastIndexOf("submitquery")+11).trim();
 							/* send the new server packet */
 							out.writeObject(pts);
 						} 
 						else if(userInput.contains("jobqueue")) {
 							//Send queue request to JT
 								pts.type = BrokerPacket.BROKER_jobqueue;
-								pts.symbol = userInput.trim();
+								pts.symbol = userInput.substring(userInput.lastIndexOf("jobqueue")+8).trim();
 								/* send the new server packet */
 								out.writeObject(pts);
 						} else {

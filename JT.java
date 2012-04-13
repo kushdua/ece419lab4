@@ -82,9 +82,9 @@ public class JT {
 	                    }
 	                }):null);
 	        } catch(KeeperException e) {
-	            System.out.println(e.code());
+	            //System.out.println(e.code());
 	        } catch(Exception e) {
-	            System.out.println(e.getMessage());
+	            //System.out.println(e.getMessage());
 	        }
 	        
 	        //Wait for deletion or create node if ret==null
@@ -133,14 +133,6 @@ public class JT {
             }
         }
 
-        try {
-        	List<String> children = listenClients(zk);
-        } catch(KeeperException e) {
-            System.out.println(e.code());
-        } catch(Exception e) {
-            System.out.println("Make node:" + e.getMessage());
-        }
-        
         
         try
         {
@@ -159,6 +151,35 @@ public class JT {
         	//Send error message below to the client...
         }
         
+        // 1: Check if the /workers node exists. If it doesn't create the new persistent node.
+        try {
+    		System.out.println("Znode /worker does not exist");
+    		zk.create(
+	            "/workers",    // Path of znode
+	            null,           // Data not needed.
+	            Ids.OPEN_ACL_UNSAFE,    // ACL, set to Completely Open.
+	            CreateMode.PERSISTENT   // Znode type, set to ephemeral.
+	            );
+        } catch(KeeperException e) {
+            System.out.println(e.code());
+        } catch(Exception e) {
+            System.out.println(e.getMessage());
+        }
+        
+        try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e2) {
+		}
+        
+        try {
+        	List<String> children = listenClients(zk);
+        } catch(KeeperException e) {
+            //System.out.println(e.code());
+        } catch(Exception e) {
+            System.out.println("Make node:" + e.getMessage());
+        }
+        
+
         //Start listening on serverPort
 		try {
 			//Keep listening for connecting clients
@@ -204,6 +225,7 @@ public class JT {
 				}
 			}
 		);
+    	System.out.println("Setting watch for listening for workers");
 		// Add the new nodes (if one client has been added)
 		int i = 0;
 		while(i < clients.size()) {
@@ -220,7 +242,7 @@ public class JT {
 		while(i < WID_Set.size()) {
         	if(!clients.contains(WID_Set.get(i))) {
         		String removedWorker=WID_Set.get(i);
-        		System.out.println("Removing CID: " + removedWorker);
+        		System.out.println("Removing WID: " + removedWorker);
         		// Remove the CID from the CID set
         		WID_Set.remove(i);
         		
@@ -235,7 +257,7 @@ public class JT {
 		//GET STATUS
 		List<String> clients=null;
 		List<String> jobs=null;
-		
+		System.out.println("Rebalancing workers");
 		try {
 			clients = zk.getChildren(
 					"/status",
@@ -252,7 +274,7 @@ public class JT {
 			String output="";
 			try {
 				jobs = zk.getChildren(
-						"/status",
+						"/status"+"/"+client,
 						null);
 			} catch (KeeperException e) {
 				jobs=null;
@@ -270,10 +292,11 @@ public class JT {
 				boolean modifiedJobSpec=false;
 				int nextWI=0;
 				
-				System.out.println("Trying to get value of job "+job);
+				//System.out.println("Trying to get value of job "+job);
 
 				while(updateSuccess==false)
 				{
+					output="";
 					modifiedJobSpec=false;
 					//MODIFY JOB FILE
 					try {
@@ -299,10 +322,11 @@ public class JT {
 									output+=","+values[1]+","+values[2]+","+
 											values[3]+","+values[4]+";";
 									modifiedJobSpec=true;
+									System.out.println("Modified "+"/status/"+client+"/"+job+" to assign "+values[1]+" part to worker "+WID_Set.get(nextWI));
 								}
 								else
 								{
-									output+=part;
+									output+=part+";";
 								}
 							}
 							else
@@ -440,11 +464,21 @@ class ClientHandler extends Thread
 					} catch (InterruptedException e) {
 						workers=null;
 					}
+
+					//System.out.println("Retrieved "+workers.size()+" workers.");
+					if(workers==null || workers.size()==0)
+					{
+			        	BrokerPacket toclient=new BrokerPacket();
+				        toclient.type=BrokerPacket.BROKER_submitquery;
+						toclient.symbol="Error: No workers available. Please try again later.";
+						toPlayer.writeObject(toclient);
+						continue;
+					}
 					
 					List<String> dictParts=null;
 					try {
 						dictParts = zk.getChildren(
-								"/status/"+CID,
+								"/dictionary",
 								null);
 					} catch (KeeperException e) {
 						dictParts=null;
@@ -452,13 +486,22 @@ class ClientHandler extends Thread
 						dictParts=null;
 					}
 
-				
+					//System.out.println("Retrieved "+dictParts.size()+" dictParts.");
+					if(dictParts==null || dictParts.size()==0)
+					{
+			        	BrokerPacket toclient=new BrokerPacket();
+				        toclient.type=BrokerPacket.BROKER_submitquery;
+						toclient.symbol="Error: No dictionary parts available. Please try again later.";
+						toPlayer.writeObject(toclient);
+						continue;
+					}
+
 					//Compute JID contents
 					Stat nodeStat=null;
 					int currDict=0;
 					while(currDict<dictParts.size())
 					{
-						for(int i=0; i<workers.size(); i++, currDict++)
+						for(int i=0; i<workers.size() && currDict<dictParts.size(); i++, currDict++)
 						{
 							byte[] dictURI=null;
 							try {
@@ -470,14 +513,17 @@ class ClientHandler extends Thread
 						        toclient.type=BrokerPacket.BROKER_submitquery;
 								toclient.symbol="Error: Could not submit new job due to problem with dictionary.";
 								toPlayer.writeObject(toclient);
+								continue;
 							} catch (InterruptedException e) {
 								BrokerPacket toclient=new BrokerPacket();
 						        toclient.type=BrokerPacket.BROKER_submitquery;
 								toclient.symbol="Error: Could not submit new job due to unexpected problem with dictionary.";
 								toPlayer.writeObject(toclient);
+								continue;
 							}
 							
 							output+=workers.get(i)+","+new String(dictURI)+","+inputHash+","+JT.JOB_PENDING+",-;";
+							//System.out.println("NJO wno: "+output+"\n");
 						}
 					}
 
@@ -497,12 +543,14 @@ class ClientHandler extends Thread
 					        toclient.type=BrokerPacket.BROKER_submitquery;
 							toclient.symbol="Error: Could not submit new job.";
 							toPlayer.writeObject(toclient);
+							continue;
 			        	}
 			        } catch(Exception e) {
 			        	BrokerPacket toclient=new BrokerPacket();
 				        toclient.type=BrokerPacket.BROKER_submitquery;
 						toclient.symbol="Error: Could not submit new job due to unexpected problem.";
 						toPlayer.writeObject(toclient);
+						continue;
 			        }
 			        
 			        //Send results to client
@@ -516,7 +564,7 @@ class ClientHandler extends Thread
 				{
 					//GET STATUS
 					List<String> jobs=null;
-					String output="JOB ID\tSTATUS\t\tPASSWORDn";
+					String output="JOB ID\t\tSTATUS\t\tPASSWORD\tHASH\n";
 
 					try {
 						jobs = zk.getChildren(
@@ -528,13 +576,14 @@ class ClientHandler extends Thread
 						jobs=null;
 					}
 
-					if(jobs.size()==0)
+					if(jobs==null || jobs.size()==0)
 					{
 						//No Jobs => Return pretty message to client
 						BrokerPacket toclient=new BrokerPacket();
 				        toclient.type=BrokerPacket.BROKER_jobqueue;
 						toclient.symbol="No Jobs found.";
 						toPlayer.writeObject(toclient);
+						continue;
 					}
 					
 					for(String elem : jobs)
@@ -548,10 +597,12 @@ class ClientHandler extends Thread
 									nodeStat);
 							String value=new String(jobValue);
 							int total=0, completed=0;
+							boolean foundit=false;
 							String[] parts=value.split(";");
+							String[] values=null;
 							for(String part : parts)
 							{
-								String[] values=part.split(",");
+								values=part.split(",");
 								if(values.length==5)
 								{
 									total++;
@@ -563,8 +614,8 @@ class ClientHandler extends Thread
 									
 									if(values[3].equals(JT.JOB_COMPLETED_FOUND))
 									{
-										output+="COMPLETE\t\t"+values[4]+";";
-										break;
+										output+="COMPLETE\t"+values[4]+"\t\t"+values[2]+"\n";
+										foundit=true;
 									}
 								}
 								else
@@ -573,32 +624,32 @@ class ClientHandler extends Thread
 								}
 							}
 							//Add progress + output here...
-							if(total==completed)
+							if(total==completed && foundit==false)
 							{
-								output+="COMPLETE\t\t-;";
+								output+="COMPLETE\t-\t\t"+values[2]+"\n";
 							}
-							else
+							else if(foundit==false)
 							{
-								output+=((completed*100)/total)+"%\t\t-;";
+								output+=((completed*100)/total)+"%\t\t-\t\t"+values[2]+"\n";
 							}
 						} catch (KeeperException e) {
-							output+="UNKNOWN\t\t-;";
+							output+="UNKNOWN\t-\t\t-\n";
 						} catch (InterruptedException e) {
-							output+="UNKNOWN\t\t-;";
+							output+="UNKNOWN\t-\t\t-\n";
 						}
 
 						//Invalid job progress contents
 						if(validJobData==false)
 						{
-							output+="UNKNOWN\t\t-;";
+							output+="UNKNOWN\t-\t\t-\n";
 						}
-						
-						//Send results to client
-						BrokerPacket toclient=new BrokerPacket();
-				        toclient.type=BrokerPacket.BROKER_jobqueue;
-						toclient.symbol=output;
-						toPlayer.writeObject(toclient);
 					}
+					
+					//Send results to client
+					BrokerPacket toclient=new BrokerPacket();
+			        toclient.type=BrokerPacket.BROKER_jobqueue;
+					toclient.symbol=output;
+					toPlayer.writeObject(toclient);
 				}
 				else if(fromclientpacket.type==BrokerPacket.BROKER_BYE)
 				{
