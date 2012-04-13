@@ -41,7 +41,6 @@ public class WorkerThreadHandler extends Thread {
 	public void run() {
 		//0 Time the process
 		long startTime = System.currentTimeMillis();
-
 		
 		//1 Execute the dictionary attack on the input hash
 		String password = findHash(dictionaryURL, pwdHash);

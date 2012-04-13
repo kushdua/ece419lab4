@@ -319,7 +319,8 @@ public class JT {
 									output+=WID_Set.get(
 											(nextWI>=WID_Set.size())?0:nextWI
 										);
-									output+=","+values[1]+","+values[2]+","+
+									//Set job to not started for newly assigned worker
+									output+=","+values[1]+","+0+","+
 											values[3]+","+values[4]+";";
 									modifiedJobSpec=true;
 									System.out.println("Modified "+"/status/"+client+"/"+job+" to assign "+values[1]+" part to worker "+WID_Set.get(nextWI));
