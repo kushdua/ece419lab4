@@ -246,6 +246,15 @@ public class JT {
         		// Remove the CID from the CID set
         		WID_Set.remove(i);
         		
+        		while(WID_Set.size()==0)
+        		{
+        			System.out.println("Waiting for workers to come online, so pending jobs can be redistributed...");
+        			try
+        			{
+        				Thread.sleep(1000);
+	        		} catch (InterruptedException e2) {
+	        		}
+        		}
         		rebalanceJobsAfterWorkerCrash(zk, removedWorker);
         	}
         	i++;
